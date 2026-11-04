@@ -1,25 +1,22 @@
 --[[
-    Script Manager - SPWN (Versão Definitiva com Banco de Dados Persistente e Posição Elevada)
-    Resolve o problema de reabertura e posiciona o painel 10% mais acima.
+    Script Manager - SPWN (Versão Definitiva com Detecção por Atributos de Memória)
+    Posicionado 10% mais acima e resistente a fechamentos/reexecuções.
 --]]
 
 local ScriptManager = {}
 ScriptManager.__index = ScriptManager
 
--- Banco de dados global permanente para nunca perder os scripts ao fechar e reabrir o Manager
-_G.RegisteredScriptDatabase = _G.RegisteredScriptDatabase or {}
-local RegisteredScripts = _G.RegisteredScriptDatabase
-
+local RegisteredScripts = {}
 local UIListFrame = nil
 local SearchBox = nil
 local MainFrame = nil
 local ScreenGuiRef = nil
 
-local function CreateManagerUI()
-    local CoreGui = game:GetService("CoreGui")
-    local Players = game:GetService("Players")
-    local LocalPlayer = Players.LocalPlayer
+local CoreGui = game:GetService("CoreGui")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
 
+local function CreateManagerUI()
     local ScreenGui = Instance.new("ScreenGui")
     ScreenGui.Name = "ScriptManager_SPWN"
     ScreenGui.ResetOnSpawn = false
@@ -34,7 +31,7 @@ local function CreateManagerUI()
     end
     ScreenGuiRef = ScreenGui
 
-    -- Janela Principal (Centralizada, mas deslocada 10% mais para cima: 0.4 em vez de 0.5)
+    -- Janela Principal (Centralizada, deslocada 10% mais para cima)
     MainFrame = Instance.new("Frame")
     MainFrame.Name = "MainFrame"
     MainFrame.Size = UDim2.new(0, 220, 0, 350)
@@ -70,7 +67,7 @@ local function CreateManagerUI()
     TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
     TitleLabel.Parent = TopBar
 
-    -- Botão de Fechar (X) - Oculta a interface do gerenciador
+    -- Botão de Fechar (X) - Destroi o painel atual permitindo reabertura limpa
     local CloseButton = Instance.new("ImageButton")
     CloseButton.Name = "CloseButton"
     CloseButton.Size = UDim2.new(0, 32, 0, 32)
@@ -80,7 +77,7 @@ local function CreateManagerUI()
     CloseButton.Parent = TopBar
 
     CloseButton.MouseButton1Click:Connect(function()
-        ScreenGui:Destroy() -- Destroi o painel do gerenciador ao fechar pelo X superior
+        ScreenGui:Destroy()
     end)
 
     -- Linha Divisória
@@ -98,7 +95,7 @@ local function CreateManagerUI()
     SearchContainer.BackgroundColor3 = Color3.fromRGB(16, 16, 20)
     SearchContainer.BorderSizePixel = 1
     SearchContainer.BorderColor3 = Color3.fromRGB(255, 255, 255)
-    SearchContainer.Parent = MainFrame
+    SearchContainer.Parent = SearchContainer and SearchContainer.Parent or MainFrame -- safe reference
 
     local SearchIcon = Instance.new("ImageLabel")
     SearchIcon.Size = UDim2.new(0, 14, 0, 14)
@@ -146,7 +143,6 @@ local function CreateManagerUI()
     UIListFrame = Scroll
 end
 
--- Renderização da Lista
 local function RefreshList()
     if not UIListFrame then return end
 
@@ -159,111 +155,110 @@ local function RefreshList()
     local filterText = SearchBox and string.lower(SearchBox.Text) or ""
 
     for id, data in pairs(RegisteredScripts) do
-        local matchesFilter = (filterText == "") or string.find(string.lower(data.Name), filterText) or string.find(string.lower(data.Category or ""), filterText)
+        -- Valida se a GUI do script ainda existe na tela
+        if data.GuiObject and data.GuiObject.Parent then
+            local matchesFilter = (filterText == "") or string.find(string.lower(data.Name), filterText) or string.find(string.lower(data.Category or ""), filterText)
 
-        if matchesFilter then
-            local ItemFrame = Instance.new("Frame")
-            ItemFrame.Size = UDim2.new(1, 0, 0, 40)
-            ItemFrame.BackgroundColor3 = Color3.fromRGB(14, 14, 18)
-            ItemFrame.BorderSizePixel = 1
-            ItemFrame.BorderColor3 = Color3.fromRGB(255, 255, 255)
-            ItemFrame.Parent = UIListFrame
+            if matchesFilter then
+                local ItemFrame = Instance.new("Frame")
+                ItemFrame.Size = UDim2.new(1, 0, 0, 40)
+                ItemFrame.BackgroundColor3 = Color3.fromRGB(14, 14, 18)
+                ItemFrame.BorderSizePixel = 1
+                ItemFrame.BorderColor3 = Color3.fromRGB(255, 255, 255)
+                ItemFrame.Parent = UIListFrame
 
-            local ItemSun = Instance.new("ImageLabel")
-            ItemSun.Size = UDim2.new(0, 16, 0, 16)
-            ItemSun.Position = UDim2.new(0, 8, 0.5, -8)
-            ItemSun.BackgroundTransparency = 1
-            ItemSun.Image = "rbxassetid://77667780640343"
-            ItemSun.Parent = ItemFrame
+                local ItemSun = Instance.new("ImageLabel")
+                ItemSun.Size = UDim2.new(0, 16, 0, 16)
+                ItemSun.Position = UDim2.new(0, 8, 0.5, -8)
+                ItemSun.BackgroundTransparency = 1
+                ItemSun.Image = "rbxassetid://77667780640343"
+                ItemSun.Parent = ItemFrame
 
-            local TextsHolder = Instance.new("Frame")
-            TextsHolder.Size = UDim2.new(0.55, -28, 1, 0)
-            TextsHolder.Position = UDim2.new(0, 28, 0, 0)
-            TextsHolder.BackgroundTransparency = 1
-            TextsHolder.Parent = ItemFrame
+                local TextsHolder = Instance.new("Frame")
+                TextsHolder.Size = UDim2.new(0.55, -28, 1, 0)
+                TextsHolder.Position = UDim2.new(0, 28, 0, 0)
+                TextsHolder.BackgroundTransparency = 1
+                TextsHolder.Parent = ItemFrame
 
-            local NameLabel = Instance.new("TextLabel")
-            NameLabel.Size = UDim2.new(1, 0, 0, 20)
-            NameLabel.Position = UDim2.new(0, 0, 0, 4)
-            NameLabel.BackgroundTransparency = 1
-            NameLabel.Text = data.Name
-            NameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-            NameLabel.Font = Enum.Font.Arcade
-            NameLabel.TextSize = 10
-            NameLabel.TextXAlignment = Enum.TextXAlignment.Left
-            NameLabel.TextTruncate = Enum.TextTruncate.AtEnd
-            NameLabel.Parent = TextsHolder
+                local NameLabel = Instance.new("TextLabel")
+                NameLabel.Size = UDim2.new(1, 0, 0, 20)
+                NameLabel.Position = UDim2.new(0, 0, 0, 4)
+                NameLabel.BackgroundTransparency = 1
+                NameLabel.Text = data.Name
+                NameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+                NameLabel.Font = Enum.Font.Arcade
+                NameLabel.TextSize = 10
+                NameLabel.TextXAlignment = Enum.TextXAlignment.Left
+                NameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+                NameLabel.Parent = TextsHolder
 
-            local SubLabel = Instance.new("TextLabel")
-            SubLabel.Size = UDim2.new(1, 0, 0, 14)
-            SubLabel.Position = UDim2.new(0, 0, 0, 20)
-            SubLabel.BackgroundTransparency = 1
-            SubLabel.Text = data.Category or "SPWN"
-            SubLabel.TextColor3 = Color3.fromRGB(150, 150, 160)
-            SubLabel.Font = Enum.Font.Arcade
-            SubLabel.TextSize = 8
-            SubLabel.TextXAlignment = Enum.TextXAlignment.Left
-            SubLabel.TextTruncate = Enum.TextTruncate.AtEnd
-            SubLabel.Parent = TextsHolder
+                local SubLabel = Instance.new("TextLabel")
+                SubLabel.Size = UDim2.new(1, 0, 0, 14)
+                SubLabel.Position = UDim2.new(0, 0, 0, 20)
+                SubLabel.BackgroundTransparency = 1
+                SubLabel.Text = data.Category or "SPWN"
+                SubLabel.TextColor3 = Color3.fromRGB(150, 150, 160)
+                SubLabel.Font = Enum.Font.Arcade
+                SubLabel.TextSize = 8
+                SubLabel.TextXAlignment = Enum.TextXAlignment.Left
+                SubLabel.TextTruncate = Enum.TextTruncate.AtEnd
+                SubLabel.Parent = TextsHolder
 
-            local ToggleBtn = Instance.new("TextButton")
-            ToggleBtn.Size = UDim2.new(0, 54, 0, 20)
-            ToggleBtn.Position = UDim2.new(1, -60, 0.5, -10)
-            ToggleBtn.Font = Enum.Font.Arcade
-            ToggleBtn.TextSize = 9
-            ToggleBtn.BorderSizePixel = 1
+                local ToggleBtn = Instance.new("TextButton")
+                ToggleBtn.Size = UDim2.new(0, 54, 0, 20)
+                ToggleBtn.Position = UDim2.new(1, -60, 0.5, -10)
+                ToggleBtn.Font = Enum.Font.Arcade
+                ToggleBtn.TextSize = 9
+                ToggleBtn.BorderSizePixel = 1
 
-            local BtnCorner = Instance.new("UICorner")
-            BtnCorner.CornerRadius = UDim.new(1, 0)
-            BtnCorner.Parent = ToggleBtn
+                local BtnCorner = Instance.new("UICorner")
+                BtnCorner.CornerRadius = UDim.new(1, 0)
+                BtnCorner.Parent = ToggleBtn
 
-            local function updateToggleVisual()
-                if data.IsVisible then
-                    ToggleBtn.Text = "Visível"
-                    ToggleBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-                    ToggleBtn.BorderColor3 = Color3.fromRGB(255, 255, 255)
-                    ToggleBtn.TextColor3 = Color3.fromRGB(10, 10, 12)
-                else
-                    ToggleBtn.Text = "Oculto"
-                    ToggleBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
-                    ToggleBtn.BorderColor3 = Color3.fromRGB(150, 150, 160)
-                    ToggleBtn.TextColor3 = Color3.fromRGB(150, 150, 160)
-                end
-            end
-
-            updateToggleVisual()
-
-            ToggleBtn.MouseButton1Click:Connect(function()
-                data.IsVisible = not data.IsVisible
-                
-                if data.GuiObject and data.GuiObject.Parent and data.GuiObject:FindFirstChild("OpenToggleButton") then
-                    local openBtn = data.GuiObject.OpenToggleButton
-                    openBtn.Visible = data.IsVisible
-                    openBtn.Active = data.IsVisible
-                end
-                
-                updateToggleVisual()
-            end)
-            ToggleBtn.Parent = ItemFrame
-
-            -- Duplo Clique para Encerrar Completamente
-            local lastClick = 0
-            ItemFrame.InputBegan:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                    local now = tick()
-                    if now - lastClick < 0.35 then
-                        if data.OnDestroy then
-                            data.OnDestroy()
-                        end
-                        if data.GuiObject then
-                            data.GuiObject:Destroy()
-                        end
-                        RegisteredScripts[id] = nil
-                        RefreshList()
+                local function updateToggleVisual()
+                    if data.IsVisible then
+                        ToggleBtn.Text = "Visível"
+                        ToggleBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                        ToggleBtn.BorderColor3 = Color3.fromRGB(255, 255, 255)
+                        ToggleBtn.TextColor3 = Color3.fromRGB(10, 10, 12)
+                    else
+                        ToggleBtn.Text = "Oculto"
+                        ToggleBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
+                        ToggleBtn.BorderColor3 = Color3.fromRGB(150, 150, 160)
+                        ToggleBtn.TextColor3 = Color3.fromRGB(150, 150, 160)
                     end
-                    lastClick = now
                 end
-            end)
+
+                updateToggleVisual()
+
+                ToggleBtn.MouseButton1Click:Connect(function()
+                    data.IsVisible = not data.IsVisible
+                    if data.GuiObject and data.GuiObject:FindFirstChild("OpenToggleButton") then
+                        local openBtn = data.GuiObject.OpenToggleButton
+                        openBtn.Visible = data.IsVisible
+                        openBtn.Active = data.IsVisible
+                    end
+                    updateToggleVisual()
+                end)
+                ToggleBtn.Parent = ItemFrame
+
+                -- Duplo Clique para Encerrar Completamente
+                local lastClick = 0
+                ItemFrame.InputBegan:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                        local now = tick()
+                        if now - lastClick < 0.35 then
+                            if data.OnDestroy then data.OnDestroy() end
+                            if data.GuiObject then data.GuiObject:Destroy() end
+                            RegisteredScripts[id] = nil
+                            RefreshList()
+                        end
+                        lastClick = now
+                    end
+                end)
+            end
+        else
+            RegisteredScripts[id] = nil
         end
     end
 end
@@ -284,17 +279,7 @@ function ScriptManager.RegisterScript(id, config)
     RefreshList()
 end
 
-function ScriptManager.UnregisterScript(id)
-    if RegisteredScripts[id] then
-        RegisteredScripts[id] = nil
-        RefreshList()
-    end
-end
-
 -- Limpa instância anterior do Gerenciador se houver
-local CoreGui = game:GetService("CoreGui")
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
 pcall(function()
     if CoreGui:FindFirstChild("ScriptManager_SPWN") then
         CoreGui.ScriptManager_SPWN:Destroy()
@@ -307,26 +292,53 @@ end)
 CreateManagerUI()
 _G.ScriptManager = ScriptManager
 
--- PROCESSA A FILA DE SCRIPTS QUE RODARAM ANTES DO MANAGER
-if _G.ScriptManagerQueue and type(_G.ScriptManagerQueue) == "table" then
-    for _, reg in ipairs(_G.ScriptManagerQueue) do
-        ScriptManager.RegisterScript(reg.id, reg.config)
-    end
-    _G.ScriptManagerQueue = nil
-end
-
--- Varredura contínua de segurança na memória
+-- VARREDURA INTELIGENTE DE MEMÓRIA (Captura scripts executados antes ou depois a qualquer momento)
 task.spawn(function()
-    while task.wait(0.5) do
+    while task.wait(0.4) do
+        -- 1. Coleta da Fila Global
         if _G.ScriptManagerQueue and type(_G.ScriptManagerQueue) == "table" then
             for i = #_G.ScriptManagerQueue, 1, -1 do
                 local reg = _G.ScriptManagerQueue[i]
-                if not RegisteredScripts[reg.id] then
-                    ScriptManager.RegisterScript(reg.id, reg.config)
+                if reg and reg.config and reg.config.GuiObject and reg.config.GuiObject.Parent then
+                    RegisteredScripts[reg.id] = {
+                        Name = reg.config.Name or reg.id,
+                        Category = reg.config.Category or "SPWN",
+                        GuiObject = reg.config.GuiObject,
+                        IsVisible = true,
+                        OnDestroy = reg.config.OnDestroy
+                    }
                 end
                 table.remove(_G.ScriptManagerQueue, i)
             end
+            RefreshList()
         end
+
+        -- 2. Varredura no CoreGui e PlayerGui por Atributos de Adaptador Hospedado
+        pcall(function()
+            local containers = {CoreGui, LocalPlayer:FindFirstChild("PlayerGui")}
+            for _, container in ipairs(containers) do
+                if container then
+                    for _, gui in ipairs(container:GetChildren()) do
+                        if gui:GetAttribute("SPWN_ManagedScriptID") then
+                            local sId = gui:GetAttribute("SPWN_ManagedScriptID")
+                            local sName = gui:GetAttribute("SPWN_ManagedScriptName") or sId
+                            local sCat = gui:GetAttribute("SPWN_ManagedScriptCategory") or "SPWN"
+                            
+                            if not RegisteredScripts[sId] then
+                                RegisteredScripts[sId] = {
+                                    Name = sName,
+                                    Category = sCat,
+                                    GuiObject = gui,
+                                    IsVisible = true,
+                                    OnDestroy = nil
+                                }
+                                RefreshList()
+                            end
+                        end
+                    end
+                end
+            end
+        end)
     end
 end)
 
