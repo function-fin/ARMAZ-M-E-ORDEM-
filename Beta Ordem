@@ -1,6 +1,6 @@
 --[[
-    Script Manager - SPWN (Versão Centralizada na Tela com DisplayOrder Prioritário)
-    Design Retro com Título Destacado, Bordas Brancas e Posição Centralizada
+    Script Manager - SPWN (Versão Definitiva com Fila + Varredura de Memória)
+    Identifica scripts executados antes ou depois do Gerenciador automaticamente.
 --]]
 
 local ScriptManager = {}
@@ -20,7 +20,7 @@ local function CreateManagerUI()
     local ScreenGui = Instance.new("ScreenGui")
     ScreenGui.Name = "ScriptManager_SPWN"
     ScreenGui.ResetOnSpawn = false
-    ScreenGui.DisplayOrder = 999 -- Garante prioridade máxima na frente do script principal (que usa 1)
+    ScreenGui.DisplayOrder = 999
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     
     pcall(function()
@@ -31,19 +31,19 @@ local function CreateManagerUI()
     end
     ScreenGuiRef = ScreenGui
 
-    -- Janela Principal (Posicionada exatamente no Centro da Tela)
+    -- Janela Principal (Centro da Tela)
     MainFrame = Instance.new("Frame")
     MainFrame.Name = "MainFrame"
     MainFrame.Size = UDim2.new(0, 220, 0, 350)
-    MainFrame.Position = UDim2.new(0.5, -110, 0.5, -175) -- Centralizado perfeitamente
+    MainFrame.Position = UDim2.new(0.5, -110, 0.5, -175)
     MainFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 12)
     MainFrame.BorderSizePixel = 2
-    MainFrame.BorderColor3 = Color3.fromRGB(255, 255, 255) -- Borda Branca Sólida
+    MainFrame.BorderColor3 = Color3.fromRGB(255, 255, 255)
     MainFrame.Active = true
     MainFrame.Draggable = true
     MainFrame.Parent = ScreenGui
 
-    -- Topo / Cabeçalho com Título Ampliado e Destacado
+    -- Topo / Cabeçalho
     local TopBar = Instance.new("Frame")
     TopBar.Size = UDim2.new(1, 0, 0, 46)
     TopBar.BackgroundTransparency = 1
@@ -67,21 +67,20 @@ local function CreateManagerUI()
     TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
     TitleLabel.Parent = TopBar
 
-    -- Botão de Fechar (X) na parte superior direita com o ID solicitado
+    -- Botão de Fechar (X)
     local CloseButton = Instance.new("ImageButton")
     CloseButton.Name = "CloseButton"
     CloseButton.Size = UDim2.new(0, 32, 0, 32)
     CloseButton.Position = UDim2.new(1, -38, 0.5, -16)
     CloseButton.BackgroundTransparency = 1
-    CloseButton.Image = "rbxassetid://78774633521849" -- ID fornecido para o botão X
+    CloseButton.Image = "rbxassetid://78774633521849"
     CloseButton.Parent = TopBar
 
-    -- Ação ao clicar no botão X: Oculta o painel sem desligar os scripts em segundo plano
     CloseButton.MouseButton1Click:Connect(function()
         MainFrame.Visible = false
     end)
 
-    -- Linha Divisória Branca Abaixo do Título
+    -- Linha Divisória
     local TopDivider = Instance.new("Frame")
     TopDivider.Size = UDim2.new(1, 0, 0, 1)
     TopDivider.Position = UDim2.new(0, 0, 0, 46)
@@ -89,7 +88,7 @@ local function CreateManagerUI()
     TopDivider.BorderSizePixel = 0
     TopDivider.Parent = MainFrame
 
-    -- Container da Barra de Pesquisa
+    -- Barra de Pesquisa
     local SearchContainer = Instance.new("Frame")
     SearchContainer.Size = UDim2.new(1, -16, 0, 28)
     SearchContainer.Position = UDim2.new(0, 8, 0, 54)
@@ -102,7 +101,7 @@ local function CreateManagerUI()
     SearchIcon.Size = UDim2.new(0, 14, 0, 14)
     SearchIcon.Position = UDim2.new(0, 6, 0.5, -7)
     SearchIcon.BackgroundTransparency = 1
-    SearchIcon.Image = "rbxassetid://84375270553103" -- ID do ícone de pesquisa
+    SearchIcon.Image = "rbxassetid://84375270553103"
     SearchIcon.Parent = SearchContainer
 
     SearchBox = Instance.new("TextBox")
@@ -118,7 +117,6 @@ local function CreateManagerUI()
     SearchBox.TextXAlignment = Enum.TextXAlignment.Left
     SearchBox.Parent = SearchContainer
 
-    -- Linha Divisória Branca Abaixo da Pesquisa
     local SearchDivider = Instance.new("Frame")
     SearchDivider.Size = UDim2.new(1, 0, 0, 1)
     SearchDivider.Position = UDim2.new(0, 0, 0, 88)
@@ -126,7 +124,7 @@ local function CreateManagerUI()
     SearchDivider.BorderSizePixel = 0
     SearchDivider.Parent = MainFrame
 
-    -- Container Scrollável da Lista
+    -- Lista Scrollável
     local Scroll = Instance.new("ScrollingFrame")
     Scroll.Size = UDim2.new(1, -8, 1, -94)
     Scroll.Position = UDim2.new(0, 4, 0, 91)
@@ -145,7 +143,7 @@ local function CreateManagerUI()
     UIListFrame = Scroll
 end
 
--- Renderização dos Itens da Lista
+-- Renderização da Lista
 local function RefreshList()
     if not UIListFrame then return end
 
@@ -168,7 +166,6 @@ local function RefreshList()
             ItemFrame.BorderColor3 = Color3.fromRGB(255, 255, 255)
             ItemFrame.Parent = UIListFrame
 
-            -- Ícone de Sol do Item
             local ItemSun = Instance.new("ImageLabel")
             ItemSun.Size = UDim2.new(0, 16, 0, 16)
             ItemSun.Position = UDim2.new(0, 8, 0.5, -8)
@@ -176,7 +173,6 @@ local function RefreshList()
             ItemSun.Image = "rbxassetid://77667780640343"
             ItemSun.Parent = ItemFrame
 
-            -- Textos (Nome + Subtítulo)
             local TextsHolder = Instance.new("Frame")
             TextsHolder.Size = UDim2.new(0.55, -28, 1, 0)
             TextsHolder.Position = UDim2.new(0, 28, 0, 0)
@@ -207,7 +203,6 @@ local function RefreshList()
             SubLabel.TextTruncate = Enum.TextTruncate.AtEnd
             SubLabel.Parent = TextsHolder
 
-            -- Botão Pílula (Visível / Oculto)
             local ToggleBtn = Instance.new("TextButton")
             ToggleBtn.Size = UDim2.new(0, 54, 0, 20)
             ToggleBtn.Position = UDim2.new(1, -60, 0.5, -10)
@@ -248,7 +243,7 @@ local function RefreshList()
             end)
             ToggleBtn.Parent = ItemFrame
 
-            -- Duplo Clique para Encerrar o Script Completamente
+            -- Duplo Clique para Encerrar Completamente
             local lastClick = 0
             ItemFrame.InputBegan:Connect(function(input)
                 if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -295,4 +290,27 @@ end
 
 CreateManagerUI()
 _G.ScriptManager = ScriptManager
+
+-- 1. PROCESSA A FILA DE SCRIPTS QUE RODARAM ANTES DO MANAGER
+if _G.ScriptManagerQueue and type(_G.ScriptManagerQueue) == "table" then
+    for _, reg in ipairs(_G.ScriptManagerQueue) do
+        ScriptManager.RegisterScript(reg.id, reg.config)
+    end
+end
+
+-- 2. LOOP DE VARREDURA EM MEMÓRIA CONTÍNUA (Pega qualquer script adicionado a qualquer momento)
+task.spawn(function()
+    while task.wait(0.5) do
+        if _G.ScriptManagerQueue and type(_G.ScriptManagerQueue) == "table" then
+            for i = #_G.ScriptManagerQueue, 1, -1 do
+                local reg = _G.ScriptManagerQueue[i]
+                if not RegisteredScripts[reg.id] then
+                    ScriptManager.RegisterScript(reg.id, reg.config)
+                end
+                table.remove(_G.ScriptManagerQueue, i)
+            end
+        end
+    end
+end)
+
 return ScriptManager
