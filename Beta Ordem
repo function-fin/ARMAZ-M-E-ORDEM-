@@ -3,6 +3,7 @@
     - Reset total ao fechar (X) ou reexecutar
     - Reconexão automática com scripts adaptados ao reabrir
     - Varredura por atributos em CoreGui e PlayerGui (recursiva)
+    - [NOVO] Persistência de visibilidade via atributo na GUI adaptada
 --]]
 
 local ScriptManager = {}
@@ -21,6 +22,35 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
 -- =========================================================
+-- [NOVO] Helpers de visibilidade persistente
+-- =========================================================
+local VIS_ATTR = "SPWN_ManagedVisibility"
+
+local function ReadPersistedVisibility(gui, fallback)
+    if gui then
+        local v = gui:GetAttribute(VIS_ATTR)
+        if v ~= nil then return v end
+    end
+    if fallback ~= nil then return fallback end
+    return true
+end
+
+local function WritePersistedVisibility(gui, value)
+    if gui then
+        pcall(function() gui:SetAttribute(VIS_ATTR, value) end)
+    end
+end
+
+local function ApplyGuiVisibility(gui, visible)
+    if not gui then return end
+    local openBtn = gui:FindFirstChild("OpenToggleButton", true)
+    if openBtn then
+        openBtn.Visible = visible
+        openBtn.Active = visible
+    end
+end
+
+-- =========================================================
 -- Reset global de estado
 -- =========================================================
 local function ResetState()
@@ -30,9 +60,6 @@ local function ResetState()
     MainFrame = nil
     ScreenGuiRef = nil
     IsDestroyed = true
-    -- não limpamos _G.ScriptManagerQueue aqui: scripts antigos
-    -- podem ter empurrado entradas enquanto o manager estava fechado;
-    -- a próxima execução consumirá.
 end
 
 -- =========================================================
@@ -42,14 +69,13 @@ local function RefreshList()
     if not UIListFrame or IsDestroyed then return end
     if not UIListFrame.Parent then return end
 
-    -- Limpa frames de itens (mantém UIListLayout)
     for _, child in ipairs(UIListFrame:GetChildren()) do
         if child:IsA("Frame") then
             child:Destroy()
         end
     end
 
-    -- Coleta entradas mortas ANTES de iterar (sem mutar durante pairs)
+    -- Coleta entradas mortas ANTES de iterar
     local toRemove = {}
     for id, data in pairs(RegisteredScripts) do
         if not (data.GuiObject and data.GuiObject.Parent) then
@@ -61,7 +87,6 @@ local function RefreshList()
     end
 
     local filterText = SearchBox and string.lower(SearchBox.Text) or ""
-    local needsSort = {}
 
     for id, data in pairs(RegisteredScripts) do
         if data.GuiObject and data.GuiObject.Parent then
@@ -141,13 +166,14 @@ local function RefreshList()
 
                 updateToggleVisual()
 
+                -- [NOVO] Toggle com persistência de visibilidade
                 ToggleBtn.MouseButton1Click:Connect(function()
                     data.IsVisible = not data.IsVisible
-                    if data.GuiObject and data.GuiObject:FindFirstChild("OpenToggleButton", true) then
-                        local openBtn = data.GuiObject:FindFirstChild("OpenToggleButton", true)
-                        openBtn.Visible = data.IsVisible
-                        openBtn.Active = data.IsVisible
-                    end
+
+                    -- Persiste na própria GUI (sobrevive a fechar/reabrir o Manager)
+                    WritePersistedVisibility(data.GuiObject, data.IsVisible)
+                    ApplyGuiVisibility(data.GuiObject, data.IsVisible)
+
                     updateToggleVisual()
                 end)
                 ToggleBtn.Parent = ItemFrame
@@ -186,7 +212,6 @@ end
 -- Criação da UI
 -- =========================================================
 local function CreateManagerUI()
-    -- Garante estado limpo antes de criar nova UI
     IsDestroyed = false
 
     local ScreenGui = Instance.new("ScreenGui")
@@ -201,7 +226,6 @@ local function CreateManagerUI()
     end
     ScreenGuiRef = ScreenGui
 
-    -- Janela Principal
     MainFrame = Instance.new("Frame")
     MainFrame.Name = "MainFrame"
     MainFrame.Size = UDim2.new(0, 220, 0, 350)
@@ -212,7 +236,6 @@ local function CreateManagerUI()
     MainFrame.Active = true
     MainFrame.Parent = ScreenGui
 
-    -- Topo
     local TopBar = Instance.new("Frame")
     TopBar.Size = UDim2.new(1, 0, 0, 46)
     TopBar.BackgroundTransparency = 1
@@ -245,14 +268,12 @@ local function CreateManagerUI()
     CloseButton.Parent = TopBar
 
     CloseButton.MouseButton1Click:Connect(function()
-        -- QUEBRA TOTAL DA LIGAÇÃO: destrói UI e invalida estado
         if ScreenGuiRef then
             ScreenGuiRef:Destroy()
         end
         ResetState()
     end)
 
-    -- Divisória
     local TopDivider = Instance.new("Frame")
     TopDivider.Size = UDim2.new(1, 0, 0, 1)
     TopDivider.Position = UDim2.new(0, 0, 0, 46)
@@ -260,7 +281,6 @@ local function CreateManagerUI()
     TopDivider.BorderSizePixel = 0
     TopDivider.Parent = MainFrame
 
-    -- Busca
     local SearchContainer = Instance.new("Frame")
     SearchContainer.Size = UDim2.new(1, -16, 0, 28)
     SearchContainer.Position = UDim2.new(0, 8, 0, 54)
@@ -300,7 +320,6 @@ local function CreateManagerUI()
     SearchDivider.BorderSizePixel = 0
     SearchDivider.Parent = MainFrame
 
-    -- Lista scrollável
     local Scroll = Instance.new("ScrollingFrame")
     Scroll.Size = UDim2.new(1, -8, 1, -94)
     Scroll.Position = UDim2.new(0, 4, 0, 91)
@@ -324,23 +343,31 @@ end
 -- =========================================================
 function ScriptManager.RegisterScript(id, config)
     if IsDestroyed then
-        -- Manager fechado: empurra para a fila para ser consumido na próxima abertura
         _G.ScriptManagerQueue = _G.ScriptManagerQueue or {}
         table.insert(_G.ScriptManagerQueue, { id = id, config = config })
         return
     end
+
+    local gui = config.GuiObject
+    -- [NOVO] Lê visibilidade persistida (sobrevive a fechar/reabrir)
+    local isVisible = ReadPersistedVisibility(gui, true)
+
     RegisteredScripts[id] = {
         Name = config.Name or id,
         Category = config.Category or "SPWN",
-        GuiObject = config.GuiObject,
-        IsVisible = true,
+        GuiObject = gui,
+        IsVisible = isVisible,
         OnDestroy = config.OnDestroy,
     }
+
+    -- [NOVO] Reaplica visibilidade real na GUI
+    ApplyGuiVisibility(gui, isVisible)
+
     RefreshList()
 end
 
 -- =========================================================
--- Setup: limpa instâncias anteriores e recria UI
+-- Setup
 -- =========================================================
 local function CleanupPreviousInstances()
     pcall(function()
@@ -358,15 +385,13 @@ end
 
 CleanupPreviousInstances()
 
--- Reset antes de recriar UI (garante reabertura limpa)
 ResetState()
 CreateManagerUI()
 
 _G.ScriptManager = ScriptManager
 
 -- =========================================================
--- Varredura periódica: detecta scripts adaptados por ATRIBUTOS
--- em CoreGui e PlayerGui (recursivo), e consome a fila.
+-- Varredura periódica
 -- =========================================================
 task.spawn(function()
     while not IsDestroyed do
@@ -378,21 +403,27 @@ task.spawn(function()
             for i = #queue, 1, -1 do
                 local reg = queue[i]
                 if reg and reg.config and reg.config.GuiObject and reg.config.GuiObject.Parent then
+                    local gui = reg.config.GuiObject
+                    -- [NOVO] Lê visibilidade persistida
+                    local isVisible = ReadPersistedVisibility(gui, true)
+
                     RegisteredScripts[reg.id] = {
                         Name = reg.config.Name or reg.id,
                         Category = reg.config.Category or "SPWN",
-                        GuiObject = reg.config.GuiObject,
-                        IsVisible = true,
+                        GuiObject = gui,
+                        IsVisible = isVisible,
                         OnDestroy = reg.config.OnDestroy,
                     }
+                    -- [NOVO] Reaplica visibilidade real
+                    ApplyGuiVisibility(gui, isVisible)
+
                     table.remove(queue, i)
                     needsRefresh = true
                 end
-                -- Se não registrou, mantém na fila (tenta de novo na próxima)
             end
         end
 
-        -- 2) Varredura por atributos (recursiva) em CoreGui e PlayerGui
+        -- 2) Varredura por atributos (recursiva)
         pcall(function()
             local containers = { CoreGui, LocalPlayer:FindFirstChild("PlayerGui") }
             for _, container in ipairs(containers) do
@@ -404,18 +435,27 @@ task.spawn(function()
                             local sCat  = gui:GetAttribute("SPWN_ManagedScriptCategory") or "SPWN"
 
                             local existing = RegisteredScripts[sId]
-                            -- Re-registra se não existe OU se o GuiObject mudou/destruiu
                             if not existing
                                 or existing.GuiObject ~= gui
                                 or not existing.GuiObject
                                 or not existing.GuiObject.Parent then
+
+                                -- [NOVO] Lê visibilidade persistida do atributo
+                                local isVisible = ReadPersistedVisibility(
+                                    gui,
+                                    existing and existing.IsVisible or nil
+                                )
+
                                 RegisteredScripts[sId] = {
                                     Name = sName,
                                     Category = sCat,
                                     GuiObject = gui,
-                                    IsVisible = existing and existing.IsVisible or true,
+                                    IsVisible = isVisible,
                                     OnDestroy = existing and existing.OnDestroy or nil,
                                 }
+                                -- [NOVO] Reaplica visibilidade real na GUI
+                                ApplyGuiVisibility(gui, isVisible)
+
                                 needsRefresh = true
                             end
                         end
