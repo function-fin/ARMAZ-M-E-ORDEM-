@@ -1,6 +1,6 @@
 --[[
-    Script Manager - SPWN (Versão Corrigida para Ocultar Apenas o Botão Flutuante)
-    Design Retro com Bordas Brancas, Linhas Divisórias e Ícones Personalizados
+    Script Manager - SPWN (Versão Vertical com Título Super Destacado)
+    Design Retro com Título Ampliado, Bordas Brancas e Comportamento Persistente
 --]]
 
 local ScriptManager = {}
@@ -10,11 +10,13 @@ local RegisteredScripts = {}
 local UIListFrame = nil
 local SearchBox = nil
 local MainFrame = nil
+local ScreenGuiRef = nil
 
 local function CreateManagerUI()
     local CoreGui = game:GetService("CoreGui")
     local Players = game:GetService("Players")
     local LocalPlayer = Players.LocalPlayer
+    local UserInputService = game:GetService("UserInputService")
 
     local ScreenGui = Instance.new("ScreenGui")
     ScreenGui.Name = "ScriptManager_SPWN"
@@ -26,12 +28,13 @@ local function CreateManagerUI()
     if not ScreenGui.Parent then
         ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
     end
+    ScreenGuiRef = ScreenGui
 
-    -- Janela Principal (Tamanho Compacto Ideal para Mobile)
+    -- Janela Principal (Formato Retangular Vertical Compacto)
     MainFrame = Instance.new("Frame")
     MainFrame.Name = "MainFrame"
-    MainFrame.Size = UDim2.new(0, 210, 0, 240)
-    MainFrame.Position = UDim2.new(0.5, -105, 0.5, -120)
+    MainFrame.Size = UDim2.new(0, 220, 0, 350)
+    MainFrame.Position = UDim2.new(0.5, -110, 0.5, -175)
     MainFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 12)
     MainFrame.BorderSizePixel = 2
     MainFrame.BorderColor3 = Color3.fromRGB(255, 255, 255) -- Borda Branca Sólida
@@ -39,45 +42,45 @@ local function CreateManagerUI()
     MainFrame.Draggable = true
     MainFrame.Parent = ScreenGui
 
-    -- Topo / Cabeçalho
+    -- Topo / Cabeçalho com Título Ampliado e Destacado
     local TopBar = Instance.new("Frame")
-    TopBar.Size = UDim2.new(1, 0, 0, 32)
+    TopBar.Size = UDim2.new(1, 0, 0, 46)
     TopBar.BackgroundTransparency = 1
     TopBar.Parent = MainFrame
 
     local SunIcon = Instance.new("ImageLabel")
-    SunIcon.Size = UDim2.new(0, 18, 0, 18)
-    SunIcon.Position = UDim2.new(0, 8, 0.5, -9)
+    SunIcon.Size = UDim2.new(0, 26, 0, 26)
+    SunIcon.Position = UDim2.new(0, 10, 0.5, -13)
     SunIcon.BackgroundTransparency = 1
     SunIcon.Image = "rbxassetid://77667780640343"
     SunIcon.Parent = TopBar
 
     local TitleLabel = Instance.new("TextLabel")
-    TitleLabel.Size = UDim2.new(1, -32, 1, 0)
-    TitleLabel.Position = UDim2.new(0, 30, 0, 0)
+    TitleLabel.Size = UDim2.new(1, -42, 1, 0)
+    TitleLabel.Position = UDim2.new(0, 40, 0, 0)
     TitleLabel.BackgroundTransparency = 1
     TitleLabel.Text = "CLOSE AND OPEN | SPWN"
     TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
     TitleLabel.Font = Enum.Font.Arcade
-    TitleLabel.TextSize = 9
+    TitleLabel.TextSize = 12 -- Fonte aumentada e altamente destacada!
     TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
     TitleLabel.Parent = TopBar
 
     -- Linha Divisória Branca Abaixo do Título
     local TopDivider = Instance.new("Frame")
     TopDivider.Size = UDim2.new(1, 0, 0, 1)
-    TopDivider.Position = UDim2.new(0, 0, 0, 32)
+    TopDivider.Position = UDim2.new(0, 0, 0, 46)
     TopDivider.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     TopDivider.BorderSizePixel = 0
     TopDivider.Parent = MainFrame
 
     -- Container da Barra de Pesquisa
     local SearchContainer = Instance.new("Frame")
-    SearchContainer.Size = UDim2.new(1, -12, 0, 24)
-    SearchContainer.Position = UDim2.new(0, 6, 0, 38)
+    SearchContainer.Size = UDim2.new(1, -16, 0, 28)
+    SearchContainer.Position = UDim2.new(0, 8, 0, 54)
     SearchContainer.BackgroundColor3 = Color3.fromRGB(16, 16, 20)
     SearchContainer.BorderSizePixel = 1
-    SearchContainer.BorderColor3 = Color3.fromRGB(255, 255, 255) -- Borda Branca
+    SearchContainer.BorderColor3 = Color3.fromRGB(255, 255, 255)
     SearchContainer.Parent = MainFrame
 
     local SearchIcon = Instance.new("ImageLabel")
@@ -96,22 +99,22 @@ local function CreateManagerUI()
     SearchBox.PlaceholderColor3 = Color3.fromRGB(130, 130, 140)
     SearchBox.TextColor3 = Color3.fromRGB(240, 240, 240)
     SearchBox.Font = Enum.Font.Arcade
-    SearchBox.TextSize = 9
+    SearchBox.TextSize = 10
     SearchBox.TextXAlignment = Enum.TextXAlignment.Left
     SearchBox.Parent = SearchContainer
 
     -- Linha Divisória Branca Abaixo da Pesquisa
     local SearchDivider = Instance.new("Frame")
     SearchDivider.Size = UDim2.new(1, 0, 0, 1)
-    SearchDivider.Position = UDim2.new(0, 0, 0, 66)
+    SearchDivider.Position = UDim2.new(0, 0, 0, 88)
     SearchDivider.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     SearchDivider.BorderSizePixel = 0
     SearchDivider.Parent = MainFrame
 
     -- Container Scrollável da Lista
     local Scroll = Instance.new("ScrollingFrame")
-    Scroll.Size = UDim2.new(1, -8, 1, -72)
-    Scroll.Position = UDim2.new(0, 4, 0, 69)
+    Scroll.Size = UDim2.new(1, -8, 1, -94)
+    Scroll.Position = UDim2.new(0, 4, 0, 91)
     Scroll.BackgroundTransparency = 1
     Scroll.BorderSizePixel = 0
     Scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
@@ -125,6 +128,22 @@ local function CreateManagerUI()
     UIList.Parent = Scroll
 
     UIListFrame = Scroll
+
+    -- Sistema de Fechar ao Clicar Fora (Oculta o painel sem reiniciar o script)
+    UserInputService.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            if MainFrame and MainFrame.Visible then
+                local mousePos = UserInputService:GetMouseLocation()
+                local absPos = MainFrame.AbsolutePosition
+                local absSize = MainFrame.AbsoluteSize
+
+                if mousePos.X < absPos.X or mousePos.X > absPos.X + absSize.X or
+                   mousePos.Y < absPos.Y or mousePos.Y > absPos.Y + absSize.Y then
+                    MainFrame.Visible = false
+                end
+            end
+        end
+    end)
 end
 
 -- Renderização dos Itens da Lista
@@ -144,61 +163,61 @@ local function RefreshList()
 
         if matchesFilter then
             local ItemFrame = Instance.new("Frame")
-            ItemFrame.Size = UDim2.new(1, 0, 0, 36)
+            ItemFrame.Size = UDim2.new(1, 0, 0, 40)
             ItemFrame.BackgroundColor3 = Color3.fromRGB(14, 14, 18)
             ItemFrame.BorderSizePixel = 1
-            ItemFrame.BorderColor3 = Color3.fromRGB(255, 255, 255) -- Borda Branca no Item
+            ItemFrame.BorderColor3 = Color3.fromRGB(255, 255, 255)
             ItemFrame.Parent = UIListFrame
 
             -- Ícone de Sol do Item
             local ItemSun = Instance.new("ImageLabel")
-            ItemSun.Size = UDim2.new(0, 14, 0, 14)
-            ItemSun.Position = UDim2.new(0, 6, 0.5, -7)
+            ItemSun.Size = UDim2.new(0, 16, 0, 16)
+            ItemSun.Position = UDim2.new(0, 8, 0.5, -8)
             ItemSun.BackgroundTransparency = 1
             ItemSun.Image = "rbxassetid://77667780640343"
             ItemSun.Parent = ItemFrame
 
             -- Textos (Nome + Subtítulo)
             local TextsHolder = Instance.new("Frame")
-            TextsHolder.Size = UDim2.new(0.55, -24, 1, 0)
-            TextsHolder.Position = UDim2.new(0, 24, 0, 0)
+            TextsHolder.Size = UDim2.new(0.55, -28, 1, 0)
+            TextsHolder.Position = UDim2.new(0, 28, 0, 0)
             TextsHolder.BackgroundTransparency = 1
             TextsHolder.Parent = ItemFrame
 
             local NameLabel = Instance.new("TextLabel")
-            NameLabel.Size = UDim2.new(1, 0, 0, 18)
-            NameLabel.Position = UDim2.new(0, 0, 0, 3)
+            NameLabel.Size = UDim2.new(1, 0, 0, 20)
+            NameLabel.Position = UDim2.new(0, 0, 0, 4)
             NameLabel.BackgroundTransparency = 1
             NameLabel.Text = data.Name
             NameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
             NameLabel.Font = Enum.Font.Arcade
-            NameLabel.TextSize = 9
+            NameLabel.TextSize = 10
             NameLabel.TextXAlignment = Enum.TextXAlignment.Left
             NameLabel.TextTruncate = Enum.TextTruncate.AtEnd
             NameLabel.Parent = TextsHolder
 
             local SubLabel = Instance.new("TextLabel")
-            SubLabel.Size = UDim2.new(1, 0, 0, 12)
-            SubLabel.Position = UDim2.new(0, 0, 0, 18)
+            SubLabel.Size = UDim2.new(1, 0, 0, 14)
+            SubLabel.Position = UDim2.new(0, 0, 0, 20)
             SubLabel.BackgroundTransparency = 1
             SubLabel.Text = data.Category or "SPWN"
             SubLabel.TextColor3 = Color3.fromRGB(150, 150, 160)
             SubLabel.Font = Enum.Font.Arcade
-            SubLabel.TextSize = 7
+            SubLabel.TextSize = 8
             SubLabel.TextXAlignment = Enum.TextXAlignment.Left
             SubLabel.TextTruncate = Enum.TextTruncate.AtEnd
             SubLabel.Parent = TextsHolder
 
             -- Botão Pílula (Visível / Oculto)
             local ToggleBtn = Instance.new("TextButton")
-            ToggleBtn.Size = UDim2.new(0, 48, 0, 18)
-            ToggleBtn.Position = UDim2.new(1, -54, 0.5, -9)
+            ToggleBtn.Size = UDim2.new(0, 54, 0, 20)
+            ToggleBtn.Position = UDim2.new(1, -60, 0.5, -10)
             ToggleBtn.Font = Enum.Font.Arcade
-            ToggleBtn.TextSize = 8
+            ToggleBtn.TextSize = 9
             ToggleBtn.BorderSizePixel = 1
 
             local BtnCorner = Instance.new("UICorner")
-            BtnCorner.CornerRadius = UDim.new(1, 0) -- Formato Pílula Arredondada
+            BtnCorner.CornerRadius = UDim.new(1, 0)
             BtnCorner.Parent = ToggleBtn
 
             local function updateToggleVisual()
@@ -220,7 +239,6 @@ local function RefreshList()
             ToggleBtn.MouseButton1Click:Connect(function()
                 data.IsVisible = not data.IsVisible
                 
-                -- Controla APENAS o botão flutuante externo (mantendo o script rodando em segundo plano)
                 if data.GuiObject and data.GuiObject:FindFirstChild("OpenToggleButton") then
                     local openBtn = data.GuiObject.OpenToggleButton
                     openBtn.Visible = data.IsVisible
