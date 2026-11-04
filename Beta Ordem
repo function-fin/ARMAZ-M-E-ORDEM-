@@ -1,12 +1,15 @@
 --[[
-    Script Manager - SPWN (Versão Definitiva com Fila + Varredura de Memória)
-    Identifica scripts executados antes ou depois do Gerenciador automaticamente.
+    Script Manager - SPWN (Versão Definitiva com Banco de Dados Persistente e Posição Elevada)
+    Resolve o problema de reabertura e posiciona o painel 10% mais acima.
 --]]
 
 local ScriptManager = {}
 ScriptManager.__index = ScriptManager
 
-local RegisteredScripts = {}
+-- Banco de dados global permanente para nunca perder os scripts ao fechar e reabrir o Manager
+_G.RegisteredScriptDatabase = _G.RegisteredScriptDatabase or {}
+local RegisteredScripts = _G.RegisteredScriptDatabase
+
 local UIListFrame = nil
 local SearchBox = nil
 local MainFrame = nil
@@ -31,11 +34,11 @@ local function CreateManagerUI()
     end
     ScreenGuiRef = ScreenGui
 
-    -- Janela Principal (Centro da Tela)
+    -- Janela Principal (Centralizada, mas deslocada 10% mais para cima: 0.4 em vez de 0.5)
     MainFrame = Instance.new("Frame")
     MainFrame.Name = "MainFrame"
     MainFrame.Size = UDim2.new(0, 220, 0, 350)
-    MainFrame.Position = UDim2.new(0.5, -110, 0.5, -175)
+    MainFrame.Position = UDim2.new(0.5, -110, 0.4, -175)
     MainFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 12)
     MainFrame.BorderSizePixel = 2
     MainFrame.BorderColor3 = Color3.fromRGB(255, 255, 255)
@@ -67,7 +70,7 @@ local function CreateManagerUI()
     TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
     TitleLabel.Parent = TopBar
 
-    -- Botão de Fechar (X)
+    -- Botão de Fechar (X) - Oculta a interface do gerenciador
     local CloseButton = Instance.new("ImageButton")
     CloseButton.Name = "CloseButton"
     CloseButton.Size = UDim2.new(0, 32, 0, 32)
@@ -77,7 +80,7 @@ local function CreateManagerUI()
     CloseButton.Parent = TopBar
 
     CloseButton.MouseButton1Click:Connect(function()
-        MainFrame.Visible = false
+        ScreenGui:Destroy() -- Destroi o painel do gerenciador ao fechar pelo X superior
     end)
 
     -- Linha Divisória
@@ -233,7 +236,7 @@ local function RefreshList()
             ToggleBtn.MouseButton1Click:Connect(function()
                 data.IsVisible = not data.IsVisible
                 
-                if data.GuiObject and data.GuiObject:FindFirstChild("OpenToggleButton") then
+                if data.GuiObject and data.GuiObject.Parent and data.GuiObject:FindFirstChild("OpenToggleButton") then
                     local openBtn = data.GuiObject.OpenToggleButton
                     openBtn.Visible = data.IsVisible
                     openBtn.Active = data.IsVisible
@@ -288,17 +291,31 @@ function ScriptManager.UnregisterScript(id)
     end
 end
 
+-- Limpa instância anterior do Gerenciador se houver
+local CoreGui = game:GetService("CoreGui")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+pcall(function()
+    if CoreGui:FindFirstChild("ScriptManager_SPWN") then
+        CoreGui.ScriptManager_SPWN:Destroy()
+    end
+    if LocalPlayer.PlayerGui:FindFirstChild("ScriptManager_SPWN") then
+        LocalPlayer.PlayerGui.ScriptManager_SPWN:Destroy()
+    end
+end)
+
 CreateManagerUI()
 _G.ScriptManager = ScriptManager
 
--- 1. PROCESSA A FILA DE SCRIPTS QUE RODARAM ANTES DO MANAGER
+-- PROCESSA A FILA DE SCRIPTS QUE RODARAM ANTES DO MANAGER
 if _G.ScriptManagerQueue and type(_G.ScriptManagerQueue) == "table" then
     for _, reg in ipairs(_G.ScriptManagerQueue) do
         ScriptManager.RegisterScript(reg.id, reg.config)
     end
+    _G.ScriptManagerQueue = nil
 end
 
--- 2. LOOP DE VARREDURA EM MEMÓRIA CONTÍNUA (Pega qualquer script adicionado a qualquer momento)
+-- Varredura contínua de segurança na memória
 task.spawn(function()
     while task.wait(0.5) do
         if _G.ScriptManagerQueue and type(_G.ScriptManagerQueue) == "table" then
