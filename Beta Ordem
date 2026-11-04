@@ -1,163 +1,73 @@
 --[[
-    Script Manager - SPWN (Versão Definitiva com Detecção por Atributos de Memória)
-    Posicionado 10% mais acima e resistente a fechamentos/reexecuções.
+    Script Manager - SPWN (Versão Definitiva)
+    - Reset total ao fechar (X) ou reexecutar
+    - Reconexão automática com scripts adaptados ao reabrir
+    - Varredura por atributos em CoreGui e PlayerGui (recursiva)
 --]]
 
 local ScriptManager = {}
 ScriptManager.__index = ScriptManager
 
+-- Estado do módulo (reatribuível para reset limpo)
 local RegisteredScripts = {}
 local UIListFrame = nil
 local SearchBox = nil
 local MainFrame = nil
 local ScreenGuiRef = nil
+local IsDestroyed = false
 
 local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
-local function CreateManagerUI()
-    local ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "ScriptManager_SPWN"
-    ScreenGui.ResetOnSpawn = false
-    ScreenGui.DisplayOrder = 999
-    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    
-    pcall(function()
-        ScreenGui.Parent = CoreGui
-    end)
-    if not ScreenGui.Parent then
-        ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-    end
-    ScreenGuiRef = ScreenGui
-
-    -- Janela Principal (Centralizada, deslocada 10% mais para cima)
-    MainFrame = Instance.new("Frame")
-    MainFrame.Name = "MainFrame"
-    MainFrame.Size = UDim2.new(0, 220, 0, 350)
-    MainFrame.Position = UDim2.new(0.5, -110, 0.4, -175)
-    MainFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 12)
-    MainFrame.BorderSizePixel = 2
-    MainFrame.BorderColor3 = Color3.fromRGB(255, 255, 255)
-    MainFrame.Active = true
-    MainFrame.Draggable = true
-    MainFrame.Parent = ScreenGui
-
-    -- Topo / Cabeçalho
-    local TopBar = Instance.new("Frame")
-    TopBar.Size = UDim2.new(1, 0, 0, 46)
-    TopBar.BackgroundTransparency = 1
-    TopBar.Parent = MainFrame
-
-    local SunIcon = Instance.new("ImageLabel")
-    SunIcon.Size = UDim2.new(0, 22, 0, 22)
-    SunIcon.Position = UDim2.new(0, 10, 0.5, -11)
-    SunIcon.BackgroundTransparency = 1
-    SunIcon.Image = "rbxassetid://77667780640343"
-    SunIcon.Parent = TopBar
-
-    local TitleLabel = Instance.new("TextLabel")
-    TitleLabel.Size = UDim2.new(1, -74, 1, 0)
-    TitleLabel.Position = UDim2.new(0, 36, 0, 0)
-    TitleLabel.BackgroundTransparency = 1
-    TitleLabel.Text = "CLOSE AND OPEN"
-    TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    TitleLabel.Font = Enum.Font.Arcade
-    TitleLabel.TextSize = 10
-    TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
-    TitleLabel.Parent = TopBar
-
-    -- Botão de Fechar (X) - Destroi o painel atual permitindo reabertura limpa
-    local CloseButton = Instance.new("ImageButton")
-    CloseButton.Name = "CloseButton"
-    CloseButton.Size = UDim2.new(0, 32, 0, 32)
-    CloseButton.Position = UDim2.new(1, -38, 0.5, -16)
-    CloseButton.BackgroundTransparency = 1
-    CloseButton.Image = "rbxassetid://78774633521849"
-    CloseButton.Parent = TopBar
-
-    CloseButton.MouseButton1Click:Connect(function()
-        ScreenGui:Destroy()
-    end)
-
-    -- Linha Divisória
-    local TopDivider = Instance.new("Frame")
-    TopDivider.Size = UDim2.new(1, 0, 0, 1)
-    TopDivider.Position = UDim2.new(0, 0, 0, 46)
-    TopDivider.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    TopDivider.BorderSizePixel = 0
-    TopDivider.Parent = MainFrame
-
-    -- Barra de Pesquisa
-    local SearchContainer = Instance.new("Frame")
-    SearchContainer.Size = UDim2.new(1, -16, 0, 28)
-    SearchContainer.Position = UDim2.new(0, 8, 0, 54)
-    SearchContainer.BackgroundColor3 = Color3.fromRGB(16, 16, 20)
-    SearchContainer.BorderSizePixel = 1
-    SearchContainer.BorderColor3 = Color3.fromRGB(255, 255, 255)
-    SearchContainer.Parent = SearchContainer and SearchContainer.Parent or MainFrame -- safe reference
-
-    local SearchIcon = Instance.new("ImageLabel")
-    SearchIcon.Size = UDim2.new(0, 14, 0, 14)
-    SearchIcon.Position = UDim2.new(0, 6, 0.5, -7)
-    SearchIcon.BackgroundTransparency = 1
-    SearchIcon.Image = "rbxassetid://84375270553103"
-    SearchIcon.Parent = SearchContainer
-
-    SearchBox = Instance.new("TextBox")
-    SearchBox.Size = UDim2.new(1, -26, 1, 0)
-    SearchBox.Position = UDim2.new(0, 24, 0, 0)
-    SearchBox.BackgroundTransparency = 1
-    SearchBox.Text = ""
-    SearchBox.PlaceholderText = "Buscar scripts..."
-    SearchBox.PlaceholderColor3 = Color3.fromRGB(130, 130, 140)
-    SearchBox.TextColor3 = Color3.fromRGB(240, 240, 240)
-    SearchBox.Font = Enum.Font.Arcade
-    SearchBox.TextSize = 10
-    SearchBox.TextXAlignment = Enum.TextXAlignment.Left
-    SearchBox.Parent = SearchContainer
-
-    local SearchDivider = Instance.new("Frame")
-    SearchDivider.Size = UDim2.new(1, 0, 0, 1)
-    SearchDivider.Position = UDim2.new(0, 0, 0, 88)
-    SearchDivider.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    SearchDivider.BorderSizePixel = 0
-    SearchDivider.Parent = MainFrame
-
-    -- Lista Scrollável
-    local Scroll = Instance.new("ScrollingFrame")
-    Scroll.Size = UDim2.new(1, -8, 1, -94)
-    Scroll.Position = UDim2.new(0, 4, 0, 91)
-    Scroll.BackgroundTransparency = 1
-    Scroll.BorderSizePixel = 0
-    Scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-    Scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    Scroll.ScrollBarThickness = 2
-    Scroll.Parent = MainFrame
-
-    local UIList = Instance.new("UIListLayout")
-    UIList.Padding = UDim.new(0, 4)
-    UIList.SortOrder = Enum.SortOrder.LayoutOrder
-    UIList.Parent = Scroll
-
-    UIListFrame = Scroll
+-- =========================================================
+-- Reset global de estado
+-- =========================================================
+local function ResetState()
+    RegisteredScripts = {}
+    UIListFrame = nil
+    SearchBox = nil
+    MainFrame = nil
+    ScreenGuiRef = nil
+    IsDestroyed = true
+    -- não limpamos _G.ScriptManagerQueue aqui: scripts antigos
+    -- podem ter empurrado entradas enquanto o manager estava fechado;
+    -- a próxima execução consumirá.
 end
 
+-- =========================================================
+-- Render da lista
+-- =========================================================
 local function RefreshList()
-    if not UIListFrame then return end
+    if not UIListFrame or IsDestroyed then return end
+    if not UIListFrame.Parent then return end
 
-    for _, child in pairs(UIListFrame:GetChildren()) do
+    -- Limpa frames de itens (mantém UIListLayout)
+    for _, child in ipairs(UIListFrame:GetChildren()) do
         if child:IsA("Frame") then
             child:Destroy()
         end
     end
 
+    -- Coleta entradas mortas ANTES de iterar (sem mutar durante pairs)
+    local toRemove = {}
+    for id, data in pairs(RegisteredScripts) do
+        if not (data.GuiObject and data.GuiObject.Parent) then
+            table.insert(toRemove, id)
+        end
+    end
+    for _, id in ipairs(toRemove) do
+        RegisteredScripts[id] = nil
+    end
+
     local filterText = SearchBox and string.lower(SearchBox.Text) or ""
+    local needsSort = {}
 
     for id, data in pairs(RegisteredScripts) do
-        -- Valida se a GUI do script ainda existe na tela
         if data.GuiObject and data.GuiObject.Parent then
-            local matchesFilter = (filterText == "") or string.find(string.lower(data.Name), filterText) or string.find(string.lower(data.Category or ""), filterText)
+            local matchesFilter = (filterText == "")
+                or string.find(string.lower(data.Name or ""), filterText, 1, true)
+                or string.find(string.lower(data.Category or ""), filterText, 1, true)
 
             if matchesFilter then
                 local ItemFrame = Instance.new("Frame")
@@ -184,7 +94,7 @@ local function RefreshList()
                 NameLabel.Size = UDim2.new(1, 0, 0, 20)
                 NameLabel.Position = UDim2.new(0, 0, 0, 4)
                 NameLabel.BackgroundTransparency = 1
-                NameLabel.Text = data.Name
+                NameLabel.Text = data.Name or id
                 NameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
                 NameLabel.Font = Enum.Font.Arcade
                 NameLabel.TextSize = 10
@@ -233,8 +143,8 @@ local function RefreshList()
 
                 ToggleBtn.MouseButton1Click:Connect(function()
                     data.IsVisible = not data.IsVisible
-                    if data.GuiObject and data.GuiObject:FindFirstChild("OpenToggleButton") then
-                        local openBtn = data.GuiObject.OpenToggleButton
+                    if data.GuiObject and data.GuiObject:FindFirstChild("OpenToggleButton", true) then
+                        local openBtn = data.GuiObject:FindFirstChild("OpenToggleButton", true)
                         openBtn.Visible = data.IsVisible
                         openBtn.Active = data.IsVisible
                     end
@@ -242,103 +152,283 @@ local function RefreshList()
                 end)
                 ToggleBtn.Parent = ItemFrame
 
-                -- Duplo Clique para Encerrar Completamente
+                -- Duplo clique para encerrar totalmente
                 local lastClick = 0
                 ItemFrame.InputBegan:Connect(function(input)
-                    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                        local now = tick()
+                    if input.UserInputType == Enum.UserInputType.MouseButton1
+                        or input.UserInputType == Enum.UserInputType.Touch then
+                        local now = os.clock()
                         if now - lastClick < 0.35 then
-                            if data.OnDestroy then data.OnDestroy() end
-                            if data.GuiObject then data.GuiObject:Destroy() end
-                            RegisteredScripts[id] = nil
-                            RefreshList()
+                            local cid = id
+                            task.defer(function()
+                                local entry = RegisteredScripts[cid]
+                                if entry then
+                                    if entry.OnDestroy then
+                                        pcall(entry.OnDestroy)
+                                    end
+                                    if entry.GuiObject then
+                                        entry.GuiObject:Destroy()
+                                    end
+                                    RegisteredScripts[cid] = nil
+                                end
+                                RefreshList()
+                            end)
                         end
                         lastClick = now
                     end
                 end)
             end
-        else
-            RegisteredScripts[id] = nil
         end
     end
 end
 
-task.spawn(function()
-    repeat task.wait() until SearchBox
-    SearchBox:GetPropertyChangedSignal("Text"):Connect(RefreshList)
-end)
+-- =========================================================
+-- Criação da UI
+-- =========================================================
+local function CreateManagerUI()
+    -- Garante estado limpo antes de criar nova UI
+    IsDestroyed = false
 
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = "ScriptManager_SPWN"
+    ScreenGui.ResetOnSpawn = false
+    ScreenGui.DisplayOrder = 999
+    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+    pcall(function() ScreenGui.Parent = CoreGui end)
+    if not ScreenGui.Parent then
+        ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+    end
+    ScreenGuiRef = ScreenGui
+
+    -- Janela Principal
+    MainFrame = Instance.new("Frame")
+    MainFrame.Name = "MainFrame"
+    MainFrame.Size = UDim2.new(0, 220, 0, 350)
+    MainFrame.Position = UDim2.new(0.5, -110, 0.4, -175)
+    MainFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 12)
+    MainFrame.BorderSizePixel = 2
+    MainFrame.BorderColor3 = Color3.fromRGB(255, 255, 255)
+    MainFrame.Active = true
+    MainFrame.Parent = ScreenGui
+
+    -- Topo
+    local TopBar = Instance.new("Frame")
+    TopBar.Size = UDim2.new(1, 0, 0, 46)
+    TopBar.BackgroundTransparency = 1
+    TopBar.Parent = MainFrame
+
+    local SunIcon = Instance.new("ImageLabel")
+    SunIcon.Size = UDim2.new(0, 22, 0, 22)
+    SunIcon.Position = UDim2.new(0, 10, 0.5, -11)
+    SunIcon.BackgroundTransparency = 1
+    SunIcon.Image = "rbxassetid://77667780640343"
+    SunIcon.Parent = TopBar
+
+    local TitleLabel = Instance.new("TextLabel")
+    TitleLabel.Size = UDim2.new(1, -74, 1, 0)
+    TitleLabel.Position = UDim2.new(0, 36, 0, 0)
+    TitleLabel.BackgroundTransparency = 1
+    TitleLabel.Text = "CLOSE AND OPEN"
+    TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    TitleLabel.Font = Enum.Font.Arcade
+    TitleLabel.TextSize = 10
+    TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    TitleLabel.Parent = TopBar
+
+    local CloseButton = Instance.new("ImageButton")
+    CloseButton.Name = "CloseButton"
+    CloseButton.Size = UDim2.new(0, 32, 0, 32)
+    CloseButton.Position = UDim2.new(1, -38, 0.5, -16)
+    CloseButton.BackgroundTransparency = 1
+    CloseButton.Image = "rbxassetid://78774633521849"
+    CloseButton.Parent = TopBar
+
+    CloseButton.MouseButton1Click:Connect(function()
+        -- QUEBRA TOTAL DA LIGAÇÃO: destrói UI e invalida estado
+        if ScreenGuiRef then
+            ScreenGuiRef:Destroy()
+        end
+        ResetState()
+    end)
+
+    -- Divisória
+    local TopDivider = Instance.new("Frame")
+    TopDivider.Size = UDim2.new(1, 0, 0, 1)
+    TopDivider.Position = UDim2.new(0, 0, 0, 46)
+    TopDivider.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    TopDivider.BorderSizePixel = 0
+    TopDivider.Parent = MainFrame
+
+    -- Busca
+    local SearchContainer = Instance.new("Frame")
+    SearchContainer.Size = UDim2.new(1, -16, 0, 28)
+    SearchContainer.Position = UDim2.new(0, 8, 0, 54)
+    SearchContainer.BackgroundColor3 = Color3.fromRGB(16, 16, 20)
+    SearchContainer.BorderSizePixel = 1
+    SearchContainer.BorderColor3 = Color3.fromRGB(255, 255, 255)
+    SearchContainer.Parent = MainFrame
+
+    local SearchIcon = Instance.new("ImageLabel")
+    SearchIcon.Size = UDim2.new(0, 14, 0, 14)
+    SearchIcon.Position = UDim2.new(0, 6, 0.5, -7)
+    SearchIcon.BackgroundTransparency = 1
+    SearchIcon.Image = "rbxassetid://84375270553103"
+    SearchIcon.Parent = SearchContainer
+
+    SearchBox = Instance.new("TextBox")
+    SearchBox.Size = UDim2.new(1, -26, 1, 0)
+    SearchBox.Position = UDim2.new(0, 24, 0, 0)
+    SearchBox.BackgroundTransparency = 1
+    SearchBox.Text = ""
+    SearchBox.PlaceholderText = "Buscar scripts..."
+    SearchBox.PlaceholderColor3 = Color3.fromRGB(130, 130, 140)
+    SearchBox.TextColor3 = Color3.fromRGB(240, 240, 240)
+    SearchBox.Font = Enum.Font.Arcade
+    SearchBox.TextSize = 10
+    SearchBox.TextXAlignment = Enum.TextXAlignment.Left
+    SearchBox.Parent = SearchContainer
+
+    SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+        RefreshList()
+    end)
+
+    local SearchDivider = Instance.new("Frame")
+    SearchDivider.Size = UDim2.new(1, 0, 0, 1)
+    SearchDivider.Position = UDim2.new(0, 0, 0, 88)
+    SearchDivider.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    SearchDivider.BorderSizePixel = 0
+    SearchDivider.Parent = MainFrame
+
+    -- Lista scrollável
+    local Scroll = Instance.new("ScrollingFrame")
+    Scroll.Size = UDim2.new(1, -8, 1, -94)
+    Scroll.Position = UDim2.new(0, 4, 0, 91)
+    Scroll.BackgroundTransparency = 1
+    Scroll.BorderSizePixel = 0
+    Scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    Scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    Scroll.ScrollBarThickness = 2
+    Scroll.Parent = MainFrame
+
+    local UIList = Instance.new("UIListLayout")
+    UIList.Padding = UDim.new(0, 4)
+    UIList.SortOrder = Enum.SortOrder.LayoutOrder
+    UIList.Parent = Scroll
+
+    UIListFrame = Scroll
+end
+
+-- =========================================================
+-- API de registro (usada por scripts adaptados que rodam DEPOIS)
+-- =========================================================
 function ScriptManager.RegisterScript(id, config)
+    if IsDestroyed then
+        -- Manager fechado: empurra para a fila para ser consumido na próxima abertura
+        _G.ScriptManagerQueue = _G.ScriptManagerQueue or {}
+        table.insert(_G.ScriptManagerQueue, { id = id, config = config })
+        return
+    end
     RegisteredScripts[id] = {
         Name = config.Name or id,
         Category = config.Category or "SPWN",
         GuiObject = config.GuiObject,
         IsVisible = true,
-        OnDestroy = config.OnDestroy
+        OnDestroy = config.OnDestroy,
     }
     RefreshList()
 end
 
--- Limpa instância anterior do Gerenciador se houver
-pcall(function()
-    if CoreGui:FindFirstChild("ScriptManager_SPWN") then
-        CoreGui.ScriptManager_SPWN:Destroy()
-    end
-    if LocalPlayer.PlayerGui:FindFirstChild("ScriptManager_SPWN") then
-        LocalPlayer.PlayerGui.ScriptManager_SPWN:Destroy()
-    end
-end)
+-- =========================================================
+-- Setup: limpa instâncias anteriores e recria UI
+-- =========================================================
+local function CleanupPreviousInstances()
+    pcall(function()
+        local g = CoreGui:FindFirstChild("ScriptManager_SPWN")
+        if g then g:Destroy() end
+    end)
+    pcall(function()
+        local pg = LocalPlayer:FindFirstChild("PlayerGui")
+        if pg then
+            local g = pg:FindFirstChild("ScriptManager_SPWN")
+            if g then g:Destroy() end
+        end
+    end)
+end
 
+CleanupPreviousInstances()
+
+-- Reset antes de recriar UI (garante reabertura limpa)
+ResetState()
 CreateManagerUI()
+
 _G.ScriptManager = ScriptManager
 
--- VARREDURA INTELIGENTE DE MEMÓRIA (Captura scripts executados antes ou depois a qualquer momento)
+-- =========================================================
+-- Varredura periódica: detecta scripts adaptados por ATRIBUTOS
+-- em CoreGui e PlayerGui (recursivo), e consome a fila.
+-- =========================================================
 task.spawn(function()
-    while task.wait(0.4) do
-        -- 1. Coleta da Fila Global
-        if _G.ScriptManagerQueue and type(_G.ScriptManagerQueue) == "table" then
-            for i = #_G.ScriptManagerQueue, 1, -1 do
-                local reg = _G.ScriptManagerQueue[i]
+    while not IsDestroyed do
+        local needsRefresh = false
+
+        -- 1) Consome a fila global — só remove se registrar com sucesso
+        local queue = _G.ScriptManagerQueue
+        if queue and type(queue) == "table" then
+            for i = #queue, 1, -1 do
+                local reg = queue[i]
                 if reg and reg.config and reg.config.GuiObject and reg.config.GuiObject.Parent then
                     RegisteredScripts[reg.id] = {
                         Name = reg.config.Name or reg.id,
                         Category = reg.config.Category or "SPWN",
                         GuiObject = reg.config.GuiObject,
                         IsVisible = true,
-                        OnDestroy = reg.config.OnDestroy
+                        OnDestroy = reg.config.OnDestroy,
                     }
+                    table.remove(queue, i)
+                    needsRefresh = true
                 end
-                table.remove(_G.ScriptManagerQueue, i)
+                -- Se não registrou, mantém na fila (tenta de novo na próxima)
             end
-            RefreshList()
         end
 
-        -- 2. Varredura no CoreGui e PlayerGui por Atributos de Adaptador Hospedado
+        -- 2) Varredura por atributos (recursiva) em CoreGui e PlayerGui
         pcall(function()
-            local containers = {CoreGui, LocalPlayer:FindFirstChild("PlayerGui")}
+            local containers = { CoreGui, LocalPlayer:FindFirstChild("PlayerGui") }
             for _, container in ipairs(containers) do
                 if container then
-                    for _, gui in ipairs(container:GetChildren()) do
-                        if gui:GetAttribute("SPWN_ManagedScriptID") then
-                            local sId = gui:GetAttribute("SPWN_ManagedScriptID")
+                    for _, gui in ipairs(container:GetDescendants()) do
+                        local sId = gui:GetAttribute("SPWN_ManagedScriptID")
+                        if sId and (gui:IsA("ScreenGui") or gui:IsA("Folder")) then
                             local sName = gui:GetAttribute("SPWN_ManagedScriptName") or sId
-                            local sCat = gui:GetAttribute("SPWN_ManagedScriptCategory") or "SPWN"
-                            
-                            if not RegisteredScripts[sId] then
+                            local sCat  = gui:GetAttribute("SPWN_ManagedScriptCategory") or "SPWN"
+
+                            local existing = RegisteredScripts[sId]
+                            -- Re-registra se não existe OU se o GuiObject mudou/destruiu
+                            if not existing
+                                or existing.GuiObject ~= gui
+                                or not existing.GuiObject
+                                or not existing.GuiObject.Parent then
                                 RegisteredScripts[sId] = {
                                     Name = sName,
                                     Category = sCat,
                                     GuiObject = gui,
-                                    IsVisible = true,
-                                    OnDestroy = nil
+                                    IsVisible = existing and existing.IsVisible or true,
+                                    OnDestroy = existing and existing.OnDestroy or nil,
                                 }
-                                RefreshList()
+                                needsRefresh = true
                             end
                         end
                     end
                 end
             end
         end)
+
+        if needsRefresh then
+            RefreshList()
+        end
+
+        task.wait(0.4)
     end
 end)
 
