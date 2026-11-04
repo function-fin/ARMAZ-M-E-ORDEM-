@@ -1,6 +1,6 @@
 --[[
     Script Manager - SPWN (Versão Vertical com Título Super Destacado)
-    Design Retro com Título Ampliado, Bordas Brancas e Comportamento Persistente
+    Design Retro com Prioridade Máxima de DisplayOrder
 --]]
 
 local ScriptManager = {}
@@ -21,6 +21,9 @@ local function CreateManagerUI()
     local ScreenGui = Instance.new("ScreenGui")
     ScreenGui.Name = "ScriptManager_SPWN"
     ScreenGui.ResetOnSpawn = false
+    -- GARANTINDO PRIORIDADE MÁXIMA SOBRE O SCRIPT PRINCIPAL
+    ScreenGui.DisplayOrder = 999999 
+    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     
     pcall(function()
         ScreenGui.Parent = CoreGui
@@ -40,12 +43,14 @@ local function CreateManagerUI()
     MainFrame.BorderColor3 = Color3.fromRGB(255, 255, 255) -- Borda Branca Sólida
     MainFrame.Active = true
     MainFrame.Draggable = true
+    MainFrame.ZIndex = 10 -- Garante que os elementos internos fiquem organizados em cima
     MainFrame.Parent = ScreenGui
 
     -- Topo / Cabeçalho com Título Ampliado e Destacado
     local TopBar = Instance.new("Frame")
     TopBar.Size = UDim2.new(1, 0, 0, 46)
     TopBar.BackgroundTransparency = 1
+    TopBar.ZIndex = 11
     TopBar.Parent = MainFrame
 
     local SunIcon = Instance.new("ImageLabel")
@@ -53,6 +58,7 @@ local function CreateManagerUI()
     SunIcon.Position = UDim2.new(0, 10, 0.5, -13)
     SunIcon.BackgroundTransparency = 1
     SunIcon.Image = "rbxassetid://77667780640343"
+    SunIcon.ZIndex = 11
     SunIcon.Parent = TopBar
 
     local TitleLabel = Instance.new("TextLabel")
@@ -62,8 +68,9 @@ local function CreateManagerUI()
     TitleLabel.Text = "CLOSE AND OPEN | SPWN"
     TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
     TitleLabel.Font = Enum.Font.Arcade
-    TitleLabel.TextSize = 12 -- Fonte aumentada e altamente destacada!
+    TitleLabel.TextSize = 12
     TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    TitleLabel.ZIndex = 11
     TitleLabel.Parent = TopBar
 
     -- Linha Divisória Branca Abaixo do Título
@@ -72,6 +79,7 @@ local function CreateManagerUI()
     TopDivider.Position = UDim2.new(0, 0, 0, 46)
     TopDivider.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     TopDivider.BorderSizePixel = 0
+    TopDivider.ZIndex = 11
     TopDivider.Parent = MainFrame
 
     -- Container da Barra de Pesquisa
@@ -81,13 +89,15 @@ local function CreateManagerUI()
     SearchContainer.BackgroundColor3 = Color3.fromRGB(16, 16, 20)
     SearchContainer.BorderSizePixel = 1
     SearchContainer.BorderColor3 = Color3.fromRGB(255, 255, 255)
+    SearchContainer.ZIndex = 11
     SearchContainer.Parent = MainFrame
 
     local SearchIcon = Instance.new("ImageLabel")
     SearchIcon.Size = UDim2.new(0, 14, 0, 14)
     SearchIcon.Position = UDim2.new(0, 6, 0.5, -7)
     SearchIcon.BackgroundTransparency = 1
-    SearchIcon.Image = "rbxassetid://84375270553103" -- ID da Pesquisa
+    SearchIcon.Image = "rbxassetid://84375270553103"
+    SearchIcon.ZIndex = 12
     SearchIcon.Parent = SearchContainer
 
     SearchBox = Instance.new("TextBox")
@@ -101,6 +111,7 @@ local function CreateManagerUI()
     SearchBox.Font = Enum.Font.Arcade
     SearchBox.TextSize = 10
     SearchBox.TextXAlignment = Enum.TextXAlignment.Left
+    SearchBox.ZIndex = 12
     SearchBox.Parent = SearchContainer
 
     -- Linha Divisória Branca Abaixo da Pesquisa
@@ -109,6 +120,7 @@ local function CreateManagerUI()
     SearchDivider.Position = UDim2.new(0, 0, 0, 88)
     SearchDivider.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     SearchDivider.BorderSizePixel = 0
+    SearchDivider.ZIndex = 11
     SearchDivider.Parent = MainFrame
 
     -- Container Scrollável da Lista
@@ -120,6 +132,7 @@ local function CreateManagerUI()
     Scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
     Scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
     Scroll.ScrollBarThickness = 2
+    Scroll.ZIndex = 11
     Scroll.Parent = MainFrame
 
     local UIList = Instance.new("UIListLayout")
@@ -167,6 +180,7 @@ local function RefreshList()
             ItemFrame.BackgroundColor3 = Color3.fromRGB(14, 14, 18)
             ItemFrame.BorderSizePixel = 1
             ItemFrame.BorderColor3 = Color3.fromRGB(255, 255, 255)
+            ItemFrame.ZIndex = 12
             ItemFrame.Parent = UIListFrame
 
             -- Ícone de Sol do Item
@@ -175,6 +189,7 @@ local function RefreshList()
             ItemSun.Position = UDim2.new(0, 8, 0.5, -8)
             ItemSun.BackgroundTransparency = 1
             ItemSun.Image = "rbxassetid://77667780640343"
+            ItemSun.ZIndex = 13
             ItemSun.Parent = ItemFrame
 
             -- Textos (Nome + Subtítulo)
@@ -182,6 +197,7 @@ local function RefreshList()
             TextsHolder.Size = UDim2.new(0.55, -28, 1, 0)
             TextsHolder.Position = UDim2.new(0, 28, 0, 0)
             TextsHolder.BackgroundTransparency = 1
+            TextsHolder.ZIndex = 13
             TextsHolder.Parent = ItemFrame
 
             local NameLabel = Instance.new("TextLabel")
@@ -194,6 +210,7 @@ local function RefreshList()
             NameLabel.TextSize = 10
             NameLabel.TextXAlignment = Enum.TextXAlignment.Left
             NameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+            NameLabel.ZIndex = 13
             NameLabel.Parent = TextsHolder
 
             local SubLabel = Instance.new("TextLabel")
@@ -206,6 +223,7 @@ local function RefreshList()
             SubLabel.TextSize = 8
             SubLabel.TextXAlignment = Enum.TextXAlignment.Left
             SubLabel.TextTruncate = Enum.TextTruncate.AtEnd
+            SubLabel.ZIndex = 13
             SubLabel.Parent = TextsHolder
 
             -- Botão Pílula (Visível / Oculto)
@@ -215,6 +233,7 @@ local function RefreshList()
             ToggleBtn.Font = Enum.Font.Arcade
             ToggleBtn.TextSize = 9
             ToggleBtn.BorderSizePixel = 1
+            ToggleBtn.ZIndex = 13
 
             local BtnCorner = Instance.new("UICorner")
             BtnCorner.CornerRadius = UDim.new(1, 0)
