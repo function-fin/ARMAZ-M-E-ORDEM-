@@ -23,6 +23,7 @@ local IsDestroyed = false
 local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
+local UserInputService = game:GetService("UserInputService")
 
 -- =========================================================
 -- [NOVO] Helpers de visibilidade persistente
@@ -79,7 +80,7 @@ local function RefreshList()
         end
     end
 
-    -- Coleta entradas mortas ANTES de iterar
+    -- Coleta entradas mortas
     local toRemove = {}
     for id, data in pairs(RegisteredScripts) do
         if not (data.GuiObject and data.GuiObject.Parent) then
@@ -103,11 +104,17 @@ local function RefreshList()
             if filterText == "" then
                 score = 1 -- Mostra todos
             else
-                -- Pontuação para busca inteligente
-                if nameLower == filterText then score = 100 -- Match exato no nome
-                elseif string.find(nameLower, filterText, 1, true) then score = 50 -- Match parcial no nome
-                elseif catLower == filterText then score = 40 -- Match exato na categoria
-                elseif string.find(catLower, filterText, 1, true) then score = 20 -- Match parcial na categoria
+                -- Lógica de Ranking (Dedução)
+                if nameLower == filterText then 
+                    score = 100 -- Nome idêntico
+                elseif string.sub(nameLower, 1, #filterText) == filterText then
+                    score = 80 -- Nome começa com a pesquisa (ex: "Clock" -> "CLOCK V2")
+                elseif string.find(nameLower, filterText, 1, true) then 
+                    score = 50 -- Nome contém a pesquisa
+                elseif catLower == filterText then 
+                    score = 40 -- Categoria idêntica
+                elseif string.find(catLower, filterText, 1, true) then 
+                    score = 20 -- Categoria contém a pesquisa
                 end
             end
 
@@ -117,48 +124,54 @@ local function RefreshList()
         end
     end
 
-    -- Ordena os resultados (Maior pontuação primeiro)
+    -- Ordena: Maior pontuação primeiro. Se empate, ordem alfabética.
     table.sort(results, function(a, b)
+        if a.score == b.score then
+            return a.data.Name < b.data.Name
+        end
         return a.score > b.score
     end)
 
-    -- Renderiza os resultados na tela
+    -- Renderiza os resultados
     local layoutOrder = 1
     for _, result in ipairs(results) do
         local id = result.id
         local data = result.data
-        local isFirst = (layoutOrder == 1) -- Usado para o brilho na borda
+        local isTopResult = (layoutOrder == 1 and filterText ~= "") -- Brilho apenas se estiver pesquisando
 
         local ItemFrame = Instance.new("Frame")
         ItemFrame.Name = "Item_" .. id
-        ItemFrame.Size = UDim2.new(1, -10, 0, 50) -- Mais alto para design
-        ItemFrame.Position = UDim2.new(0, 5, 0, 0)
+        ItemFrame.Size = UDim2.new(1, -8, 0, 52) -- Altura ajustada
+        ItemFrame.Position = UDim2.new(0, 4, 0, 0)
         ItemFrame.BackgroundColor3 = Color3.fromRGB(14, 14, 18)
         ItemFrame.BorderSizePixel = 1
-        ItemFrame.BorderColor3 = Color3.fromRGB(255, 255, 255)
+        ItemFrame.BorderColor3 = Color3.fromRGB(60, 60, 65) -- Borda sutil nos itens normais
         ItemFrame.LayoutOrder = layoutOrder
         ItemFrame.Parent = UIListFrame
 
-        -- [NOVO] Efeito de Brilho na borda do primeiro item (como na imagem)
-        if isFirst then
+        -- [NOVO] Efeito de Destaque no Topo (como na 2ª imagem)
+        if isTopResult then
+            ItemFrame.BorderColor3 = Color3.fromRGB(255, 255, 255)
             local glowStroke = Instance.new("UIStroke")
             glowStroke.Color = Color3.fromRGB(255, 255, 255)
-            glowStroke.Thickness = 3
-            glowStroke.Transparency = 0.3
+            glowStroke.Thickness = 2
+            glowStroke.Transparency = 0.2
             glowStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
             glowStroke.Parent = ItemFrame
         end
 
+        -- Ícone de Sol/Estrela (Esquerda)
         local ItemSun = Instance.new("ImageLabel")
-        ItemSun.Size = UDim2.new(0, 20, 0, 20)
-        ItemSun.Position = UDim2.new(0, 10, 0.5, -10)
+        ItemSun.Size = UDim2.new(0, 22, 0, 22)
+        ItemSun.Position = UDim2.new(0, 10, 0.5, -11)
         ItemSun.BackgroundTransparency = 1
         ItemSun.Image = "rbxassetid://77667780640343"
         ItemSun.Parent = ItemFrame
 
+        -- Textos (Nome e Categoria)
         local TextsHolder = Instance.new("Frame")
-        TextsHolder.Size = UDim2.new(0.6, -30, 1, 0)
-        TextsHolder.Position = UDim2.new(0, 35, 0, 0)
+        TextsHolder.Size = UDim2.new(0.65, -30, 1, 0)
+        TextsHolder.Position = UDim2.new(0, 38, 0, 0)
         TextsHolder.BackgroundTransparency = 1
         TextsHolder.Parent = ItemFrame
 
@@ -168,7 +181,7 @@ local function RefreshList()
         NameLabel.BackgroundTransparency = 1
         NameLabel.Text = data.Name or id
         NameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        NameLabel.Font = Enum.Font.GothamBold -- Fonte mais grossa
+        NameLabel.Font = Enum.Font.GothamBold
         NameLabel.TextSize = 14
         NameLabel.TextXAlignment = Enum.TextXAlignment.Left
         NameLabel.TextTruncate = Enum.TextTruncate.AtEnd
@@ -179,13 +192,14 @@ local function RefreshList()
         SubLabel.Position = UDim2.new(0, 0, 0, 26)
         SubLabel.BackgroundTransparency = 1
         SubLabel.Text = data.Category or "SPWN"
-        SubLabel.TextColor3 = Color3.fromRGB(150, 150, 160)
+        SubLabel.TextColor3 = Color3.fromRGB(130, 130, 140)
         SubLabel.Font = Enum.Font.Gotham
         SubLabel.TextSize = 10
         SubLabel.TextXAlignment = Enum.TextXAlignment.Left
         SubLabel.TextTruncate = Enum.TextTruncate.AtEnd
         SubLabel.Parent = TextsHolder
 
+        -- Botão Visível/Oculto
         local ToggleBtn = Instance.new("TextButton")
         ToggleBtn.Size = UDim2.new(0, 60, 0, 24)
         ToggleBtn.Position = UDim2.new(1, -70, 0.5, -12)
@@ -206,7 +220,7 @@ local function RefreshList()
             else
                 ToggleBtn.Text = "Oculto"
                 ToggleBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
-                ToggleBtn.BorderColor3 = Color3.fromRGB(150, 150, 160)
+                ToggleBtn.BorderColor3 = Color3.fromRGB(100, 100, 110)
                 ToggleBtn.TextColor3 = Color3.fromRGB(150, 150, 160)
             end
         end
@@ -221,11 +235,10 @@ local function RefreshList()
         end)
         ToggleBtn.Parent = ItemFrame
 
-        -- Duplo clique para encerrar totalmente
+        -- Duplo clique para encerrar
         local lastClick = 0
         ItemFrame.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1
-                or input.UserInputType == Enum.UserInputType.Touch then
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
                 local now = os.clock()
                 if now - lastClick < 0.35 then
                     local cid = id
@@ -265,17 +278,18 @@ local function CreateManagerUI()
     end
     ScreenGuiRef = ScreenGui
 
+    -- Frame Principal
     MainFrame = Instance.new("Frame")
     MainFrame.Name = "MainFrame"
-    MainFrame.Size = UDim2.new(0, 280, 0, 400) -- Mais largo e alto
-    MainFrame.Position = UDim2.new(0.5, -140, 0.4, -200)
-    MainFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 12)
+    MainFrame.Size = UDim2.new(0, 320, 0, 450) -- Aumentado para acomodar melhor os itens
+    MainFrame.Position = UDim2.new(0.5, -160, 0.4, -225)
+    MainFrame.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
     MainFrame.BorderSizePixel = 2
     MainFrame.BorderColor3 = Color3.fromRGB(255, 255, 255)
     MainFrame.Active = true
     MainFrame.Parent = ScreenGui
 
-    -- [NOVO] Lógica Arrastável (Draggable)
+    -- Lógica Arrastável (Draggable)
     local dragging, dragInput, dragStart, startPos
     MainFrame.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -292,41 +306,41 @@ local function CreateManagerUI()
             dragInput = input
         end
     end)
-    game:GetService("UserInputService").InputChanged:Connect(function(input)
+    UserInputService.InputChanged:Connect(function(input)
         if input == dragInput and dragging then
             local delta = input.Position - dragStart
             MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
         end
     end)
 
-    -- TopBar
+    -- TopBar (Título e Botão de Fechar)
     local TopBar = Instance.new("Frame")
-    TopBar.Size = UDim2.new(1, 0, 0, 50)
+    TopBar.Size = UDim2.new(1, 0, 0, 55)
     TopBar.BackgroundTransparency = 1
     TopBar.Parent = MainFrame
 
     local SunIcon = Instance.new("ImageLabel")
-    SunIcon.Size = UDim2.new(0, 28, 0, 28)
-    SunIcon.Position = UDim2.new(0, 10, 0.5, -14)
+    SunIcon.Size = UDim2.new(0, 30, 0, 30)
+    SunIcon.Position = UDim2.new(0, 12, 0.5, -15)
     SunIcon.BackgroundTransparency = 1
     SunIcon.Image = "rbxassetid://77667780640343"
     SunIcon.Parent = TopBar
 
     local TitleLabel = Instance.new("TextLabel")
     TitleLabel.Size = UDim2.new(1, -80, 1, 0)
-    TitleLabel.Position = UDim2.new(0, 44, 0, 0)
+    TitleLabel.Position = UDim2.new(0, 50, 0, 0)
     TitleLabel.BackgroundTransparency = 1
-    TitleLabel.Text = "CLOSE AND OPEN" -- Título Maior e Destacado
+    TitleLabel.Text = "CLOSE AND OPEN"
     TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    TitleLabel.Font = Enum.Font.GothamBlack -- Fonte mais forte
-    TitleLabel.TextSize = 16
+    TitleLabel.Font = Enum.Font.GothamBlack 
+    TitleLabel.TextSize = 18 -- Título maior e em negrito
     TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
     TitleLabel.Parent = TopBar
 
     local CloseButton = Instance.new("ImageButton")
     CloseButton.Name = "CloseButton"
     CloseButton.Size = UDim2.new(0, 34, 0, 34)
-    CloseButton.Position = UDim2.new(1, -42, 0.5, -17)
+    CloseButton.Position = UDim2.new(1, -46, 0.5, -17)
     CloseButton.BackgroundTransparency = 1
     CloseButton.Image = "rbxassetid://78774633521849"
     CloseButton.Parent = TopBar
@@ -337,22 +351,21 @@ local function CreateManagerUI()
     end)
 
     local TopDivider = Instance.new("Frame")
-    TopDivider.Size = UDim2.new(1, 0, 0, 2) -- Borda mais grossa
-    TopDivider.Position = UDim2.new(0, 0, 0, 50)
+    TopDivider.Size = UDim2.new(1, 0, 0, 2)
+    TopDivider.Position = UDim2.new(0, 0, 0, 55)
     TopDivider.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     TopDivider.BorderSizePixel = 0
     TopDivider.Parent = MainFrame
 
     -- Barra de Pesquisa
     local SearchContainer = Instance.new("Frame")
-    SearchContainer.Size = UDim2.new(1, -20, 0, 32)
-    SearchContainer.Position = UDim2.new(0, 10, 0, 60)
-    SearchContainer.BackgroundColor3 = Color3.fromRGB(16, 16, 20)
+    SearchContainer.Size = UDim2.new(1, -20, 0, 34)
+    SearchContainer.Position = UDim2.new(0, 10, 0, 65)
+    SearchContainer.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
     SearchContainer.BorderSizePixel = 1
     SearchContainer.BorderColor3 = Color3.fromRGB(255, 255, 255)
     SearchContainer.Parent = MainFrame
     
-    -- Arredondar a barra de pesquisa
     local searchCorner = Instance.new("UICorner")
     searchCorner.CornerRadius = UDim.new(0, 4)
     searchCorner.Parent = SearchContainer
@@ -383,33 +396,40 @@ local function CreateManagerUI()
 
     local SearchDivider = Instance.new("Frame")
     SearchDivider.Size = UDim2.new(1, 0, 0, 2)
-    SearchDivider.Position = UDim2.new(0, 0, 0, 102)
+    SearchDivider.Position = UDim2.new(0, 0, 0, 109)
     SearchDivider.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     SearchDivider.BorderSizePixel = 0
     SearchDivider.Parent = MainFrame
 
     -- ScrollingFrame (Lista de Scripts)
     local Scroll = Instance.new("ScrollingFrame")
-    Scroll.Size = UDim2.new(1, -4, 1, -108) -- Deixa espaço para a barra de rolagem não obstruir
-    Scroll.Position = UDim2.new(0, 2, 0, 106)
+    Scroll.Size = UDim2.new(1, -8, 1, -119) -- Ajustado para não encostar nas bordas
+    Scroll.Position = UDim2.new(0, 4, 0, 115)
     Scroll.BackgroundTransparency = 1
     Scroll.BorderSizePixel = 0
     Scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
     Scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-    Scroll.ScrollBarThickness = 4
-    Scroll.ScrollBarImageColor3 = Color3.fromRGB(150, 150, 150) -- Barra de rolagem visível
+    Scroll.ScrollBarThickness = 3
+    Scroll.ScrollBarImageColor3 = Color3.fromRGB(200, 200, 200)
+    Scroll.ScrollBarImageTransparency = 0.5
     Scroll.Parent = MainFrame
 
     local UIList = Instance.new("UIListLayout")
-    UIList.Padding = UDim.new(0, 6) -- Mais espaço entre itens
+    UIList.Padding = UDim.new(0, 6) -- Espaçamento entre as caixas
     UIList.SortOrder = Enum.SortOrder.LayoutOrder
     UIList.Parent = Scroll
+
+    -- Padding para os itens não colarem no topo/fundo do scroll
+    local UIPadding = Instance.new("UIPadding")
+    UIPadding.PaddingTop = UDim.new(0, 4)
+    UIPadding.PaddingBottom = UDim.new(0, 4)
+    UIPadding.Parent = Scroll
 
     UIListFrame = Scroll
 end
 
 -- =========================================================
--- API de registro (usada por scripts adaptados que rodam DEPOIS)
+-- API de registro
 -- =========================================================
 function ScriptManager.RegisterScript(id, config)
     if IsDestroyed then
@@ -464,7 +484,6 @@ task.spawn(function()
     while not IsDestroyed do
         local needsRefresh = false
 
-        -- 1) Consome a fila global
         local queue = _G.ScriptManagerQueue
         if queue and type(queue) == "table" then
             for i = #queue, 1, -1 do
@@ -488,7 +507,6 @@ task.spawn(function()
             end
         end
 
-        -- 2) Varredura por atributos (recursiva)
         pcall(function()
             local containers = { CoreGui, LocalPlayer:FindFirstChild("PlayerGui") }
             for _, container in ipairs(containers) do
