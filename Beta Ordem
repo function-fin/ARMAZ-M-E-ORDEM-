@@ -11,6 +11,7 @@ local IsDestroyed = false
 local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
+local UserInputService = game:GetService("UserInputService")
 
 local VIS_ATTR = "SPWN_ManagedVisibility"
 
@@ -51,7 +52,6 @@ local function RefreshList()
     if not UIListFrame or IsDestroyed then return end
     if not UIListFrame.Parent then return end
 
-    -- Limpa a lista atual
     for _, child in ipairs(UIListFrame:GetChildren()) do
         if child:IsA("Frame") then
             child:Destroy()
@@ -60,7 +60,6 @@ local function RefreshList()
 
     local toRemove = {}
     for id, data in pairs(RegisteredScripts) do
-        -- Se o GuiObject não existir mais ou não tiver um Parent válido, marca para remover
         if not data.GuiObject or not data.GuiObject.Parent then
             table.insert(toRemove, id)
         end
@@ -112,18 +111,15 @@ local function RefreshList()
         ItemFrame.Size = UDim2.new(1, -6, 0, 34) 
         ItemFrame.Position = UDim2.new(0, 3, 0, 0)
         ItemFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
-        -- [CORREÇÃO VISUAL] Removemos a borda padrão do Frame para o Stroke agir sozinho
         ItemFrame.BorderSizePixel = 0 
         ItemFrame.Parent = UIListFrame
 
-        -- [CORREÇÃO VISUAL] Stroke aplicado de forma limpa
         local UIStroke = Instance.new("UIStroke")
         UIStroke.Color = Color3.fromRGB(50, 50, 60)
         UIStroke.Thickness = 1
-        UIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border -- Desenha a borda por dentro
+        UIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
         UIStroke.Parent = ItemFrame
 
-        -- Destaque de pesquisa (Borda branca brilhante)
         if index == 1 and filterText ~= "" then
             UIStroke.Color = Color3.fromRGB(255, 255, 255)
             UIStroke.Thickness = 2
@@ -172,7 +168,6 @@ local function RefreshList()
         ToggleBtn.Font = Enum.Font.GothamBold
         ToggleBtn.TextSize = 9
         ToggleBtn.BorderSizePixel = 0
-        -- [CORREÇÃO VISUAL] Impede que o botão "vaze" para fora da moldura
         ToggleBtn.ClipsDescendants = true 
 
         local BtnCorner = Instance.new("UICorner")
@@ -193,7 +188,6 @@ local function RefreshList()
                 ToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
                 ToggleBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
                 
-                -- [CORREÇÃO VISUAL] Força a borda do ItemFrame a ficar branca e fina
                 UIStroke.Color = Color3.fromRGB(255, 255, 255)
                 UIStroke.Thickness = 1.5
                 
@@ -254,6 +248,22 @@ local function CreateManagerUI()
         ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
     end
     ScreenGuiRef = ScreenGui
+
+    -- =====================================================================
+    -- ADAPTAÇÃO AUTOMÁTICA DE ESCALA (+70% NO PC, PADRÃO NO MOBILE)
+    -- =====================================================================
+    local uiScale = Instance.new("UIScale", ScreenGui)
+    local function updateUIScale()
+        if not UserInputService.TouchEnabled then
+            uiScale.Scale = 1.7 -- Aumenta 70% no PC
+        else
+            uiScale.Scale = 1.0 -- Mantém tamanho padrão no mobile
+        end
+    end
+    updateUIScale()
+
+    -- Atualiza escala se o dispositivo mudar (ex: notebook híbrido)
+    UserInputService.LastInputTypeChanged:Connect(updateUIScale)
 
     MainFrame = Instance.new("Frame")
     MainFrame.Name = "MainFrame"
@@ -490,8 +500,6 @@ task.spawn(function()
             end
         end)
 
-        -- [CORREÇÃO CRUCIAL] Verifica a todo momento se os scripts ainda existem no jogo.
-        -- Se o jogador fechar o script externo, o RefreshList vai limpar a tabela.
         for id, data in pairs(RegisteredScripts) do
             if not data.GuiObject or not data.GuiObject.Parent then
                 needsRefresh = true
