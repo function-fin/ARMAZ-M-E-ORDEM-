@@ -16,417 +16,484 @@ local UserInputService = game:GetService("UserInputService")
 local VIS_ATTR = "SPWN_ManagedVisibility"
 
 local function ReadPersistedVisibility(gui, fallback)
-    if gui then
-        local v = gui:GetAttribute(VIS_ATTR)
-        if v ~= nil then return v end
-    end
-    if fallback ~= nil then return fallback end
-    return true
+	if gui then
+		local v = gui:GetAttribute(VIS_ATTR)
+		if v ~= nil then return v end
+	end
+	if fallback ~= nil then return fallback end
+	return true
 end
 
 local function WritePersistedVisibility(gui, value)
-    if gui then
-        pcall(function() gui:SetAttribute(VIS_ATTR, value) end)
-    end
+	if gui then
+		pcall(function() gui:SetAttribute(VIS_ATTR, value) end)
+	end
+end
+
+local function FindCompanionGuis(gui)
+	local companions = {}
+	if not gui then return companions end
+
+	local parent = gui.Parent
+	if parent then
+		-- Caso comum: ScreenGui principal em CoreGui/PlayerGui e OpenToggleGui separado
+		if gui.Name == "HumanoidStatusGUI" then
+			local openToggleGui = parent:FindFirstChild("OpenToggleGui")
+			if openToggleGui and openToggleGui:IsA("ScreenGui") then
+				table.insert(companions, openToggleGui)
+			end
+		end
+	end
+
+	return companions
 end
 
 local function ApplyGuiVisibility(gui, visible)
-    if not gui then return end
-    local openBtn = gui:FindFirstChild("OpenToggleButton", true)
-    if openBtn then
-        openBtn.Visible = visible
-        openBtn.Active = visible
-    end
+	if not gui then return end
+
+	-- 1. Procura OpenToggleButton dentro do próprio gui (padrão interno)
+	local openBtn = gui:FindFirstChild("OpenToggleButton", true)
+	local foundExternalToggle = false
+
+	if openBtn and (openBtn:IsA("GuiButton") or openBtn:IsA("GuiObject")) then
+		openBtn.Visible = visible
+		if openBtn:IsA("GuiButton") then
+			openBtn.Active = visible
+		end
+		foundExternalToggle = true
+	end
+
+	-- 2. Procura OpenToggleButton em ScreenGuis companheiros (ex: OpenToggleGui separado)
+	for _, compGui in ipairs(FindCompanionGuis(gui)) do
+		local compBtn = compGui:FindFirstChild("OpenToggleButton", true)
+		if compBtn and (compBtn:IsA("GuiButton") or compBtn:IsA("GuiObject")) then
+			compBtn.Visible = visible
+			if compBtn:IsA("GuiButton") then
+				compBtn.Active = visible
+			end
+			foundExternalToggle = true
+		end
+	end
+
+	-- 3. Fallback universal: se não houver botão toggle externo, alterna diretamente
+	-- o MainFrameBorder / MainFrame / ScreenGui (exceto o próprio ScriptManager_SPWN)
+	if not foundExternalToggle and gui.Name ~= "ScriptManager_SPWN" then
+		local mainBorder = gui:FindFirstChild("MainFrameBorder", true)
+		local mainFrame = gui:FindFirstChild("MainFrame", true)
+
+		if mainBorder and mainBorder:IsA("GuiObject") then
+			mainBorder.Visible = visible
+		elseif mainFrame and mainFrame:IsA("GuiObject") then
+			mainFrame.Visible = visible
+		elseif gui:IsA("ScreenGui") then
+			gui.Enabled = visible
+		elseif gui:IsA("GuiObject") then
+			gui.Visible = visible
+		end
+	end
+end
+
+local function DestroyCompanionGuis(gui)
+	for _, compGui in ipairs(FindCompanionGuis(gui)) do
+		pcall(function()
+			if compGui and compGui.Parent then
+				compGui:Destroy()
+			end
+		end)
+	end
 end
 
 local function ResetState()
-    RegisteredScripts = {}
-    UIListFrame = nil
-    SearchBox = nil
-    MainFrame = nil
-    ScreenGuiRef = nil
-    IsDestroyed = true
+	RegisteredScripts = {}
+	UIListFrame = nil
+	SearchBox = nil
+	MainFrame = nil
+	ScreenGuiRef = nil
+	IsDestroyed = true
 end
 
 local function RefreshList()
-    if not UIListFrame or IsDestroyed then return end
-    if not UIListFrame.Parent then return end
+	if not UIListFrame or IsDestroyed then return end
+	if not UIListFrame.Parent then return end
 
-    for _, child in ipairs(UIListFrame:GetChildren()) do
-        if child:IsA("Frame") then
-            child:Destroy()
-        end
-    end
+	for _, child in ipairs(UIListFrame:GetChildren()) do
+		if child:IsA("Frame") then
+			child:Destroy()
+		end
+	end
 
-    local toRemove = {}
-    for id, data in pairs(RegisteredScripts) do
-        if not data.GuiObject or not data.GuiObject.Parent then
-            table.insert(toRemove, id)
-        end
-    end
-    for _, id in ipairs(toRemove) do
-        RegisteredScripts[id] = nil
-    end
+	local toRemove = {}
+	for id, data in pairs(RegisteredScripts) do
+		if not data.GuiObject or not data.GuiObject.Parent then
+			table.insert(toRemove, id)
+		end
+	end
+	for _, id in ipairs(toRemove) do
+		RegisteredScripts[id] = nil
+	end
 
-    local filterText = SearchBox and string.lower(SearchBox.Text) or ""
-    local filteredList = {}
+	local filterText = SearchBox and string.lower(SearchBox.Text) or ""
+	local filteredList = {}
 
-    for id, data in pairs(RegisteredScripts) do
-        if data.GuiObject and data.GuiObject.Parent then
-            local nameLower = string.lower(data.Name or "")
-            local catLower = string.lower(data.Category or "")
-            
-            local matches = false
-            local matchScore = 0
+	for id, data in pairs(RegisteredScripts) do
+		if data.GuiObject and data.GuiObject.Parent then
+			local nameLower = string.lower(data.Name or "")
+			local catLower = string.lower(data.Category or "")
 
-            if filterText == "" then
-                matches = true
-            else
-                local nameStart = string.find(nameLower, filterText, 1, true)
-                if nameStart then
-                    matches = true
-                    if nameStart == 1 then matchScore = 100 else matchScore = 50 end
-                end
-                if not matches and string.find(catLower, filterText, 1, true) then
-                    matches = true
-                    matchScore = 10
-                end
-            end
+			local matches = false
+			local matchScore = 0
 
-            if matches then
-                table.insert(filteredList, {id = id, data = data, score = matchScore})
-            end
-        end
-    end
+			if filterText == "" then
+				matches = true
+			else
+				local nameStart = string.find(nameLower, filterText, 1, true)
+				if nameStart then
+					matches = true
+					if nameStart == 1 then matchScore = 100 else matchScore = 50 end
+				end
+				if not matches and string.find(catLower, filterText, 1, true) then
+					matches = true
+					matchScore = 10
+				end
+			end
 
-    table.sort(filteredList, function(a, b)
-        return a.score > b.score
-    end)
+			if matches then
+				table.insert(filteredList, {id = id, data = data, score = matchScore})
+			end
+		end
+	end
 
-    for index, item in ipairs(filteredList) do
-        local id = item.id
-        local data = item.data
+	table.sort(filteredList, function(a, b)
+		return a.score > b.score
+	end)
 
-        local ItemFrame = Instance.new("Frame")
-        ItemFrame.Size = UDim2.new(1, -6, 0, 34) 
-        ItemFrame.Position = UDim2.new(0, 3, 0, 0)
-        ItemFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
-        ItemFrame.BorderSizePixel = 0 
-        ItemFrame.Parent = UIListFrame
+	for index, item in ipairs(filteredList) do
+		local id = item.id
+		local data = item.data
 
-        local UIStroke = Instance.new("UIStroke")
-        UIStroke.Color = Color3.fromRGB(50, 50, 60)
-        UIStroke.Thickness = 1
-        UIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-        UIStroke.Parent = ItemFrame
+		local ItemFrame = Instance.new("Frame")
+		ItemFrame.Size = UDim2.new(1, -6, 0, 34) 
+		ItemFrame.Position = UDim2.new(0, 3, 0, 0)
+		ItemFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
+		ItemFrame.BorderSizePixel = 0 
+		ItemFrame.Parent = UIListFrame
 
-        if index == 1 and filterText ~= "" then
-            UIStroke.Color = Color3.fromRGB(255, 255, 255)
-            UIStroke.Thickness = 2
-        end
+		local UIStroke = Instance.new("UIStroke")
+		UIStroke.Color = Color3.fromRGB(50, 50, 60)
+		UIStroke.Thickness = 1
+		UIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		UIStroke.Parent = ItemFrame
 
-        local ItemSun = Instance.new("ImageLabel")
-        ItemSun.Size = UDim2.new(0, 14, 0, 14)
-        ItemSun.Position = UDim2.new(0, 6, 0.5, -7)
-        ItemSun.BackgroundTransparency = 1
-        ItemSun.Image = "rbxassetid://77667780640343"
-        ItemSun.Parent = ItemFrame
+		if index == 1 and filterText ~= "" then
+			UIStroke.Color = Color3.fromRGB(255, 255, 255)
+			UIStroke.Thickness = 2
+		end
 
-        local TextsHolder = Instance.new("Frame")
-        TextsHolder.Size = UDim2.new(0.55, -24, 1, 0)
-        TextsHolder.Position = UDim2.new(0, 26, 0, 0)
-        TextsHolder.BackgroundTransparency = 1
-        TextsHolder.Parent = ItemFrame
+		local ItemSun = Instance.new("ImageLabel")
+		ItemSun.Size = UDim2.new(0, 14, 0, 14)
+		ItemSun.Position = UDim2.new(0, 6, 0.5, -7)
+		ItemSun.BackgroundTransparency = 1
+		ItemSun.Image = "rbxassetid://77667780640343"
+		ItemSun.Parent = ItemFrame
 
-        local NameLabel = Instance.new("TextLabel")
-        NameLabel.Size = UDim2.new(1, 0, 0, 16)
-        NameLabel.Position = UDim2.new(0, 0, 0, 2)
-        NameLabel.BackgroundTransparency = 1
-        NameLabel.Text = data.Name or id
-        NameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        NameLabel.Font = Enum.Font.GothamBold 
-        NameLabel.TextSize = 10
-        NameLabel.TextXAlignment = Enum.TextXAlignment.Left
-        NameLabel.TextTruncate = Enum.TextTruncate.AtEnd
-        NameLabel.Parent = TextsHolder
+		local TextsHolder = Instance.new("Frame")
+		TextsHolder.Size = UDim2.new(0.55, -24, 1, 0)
+		TextsHolder.Position = UDim2.new(0, 26, 0, 0)
+		TextsHolder.BackgroundTransparency = 1
+		TextsHolder.Parent = ItemFrame
 
-        local SubLabel = Instance.new("TextLabel")
-        SubLabel.Size = UDim2.new(1, 0, 0, 12)
-        SubLabel.Position = UDim2.new(0, 0, 0, 17)
-        SubLabel.BackgroundTransparency = 1
-        SubLabel.Text = data.Category or "SPWN"
-        SubLabel.TextColor3 = Color3.fromRGB(130, 130, 140)
-        SubLabel.Font = Enum.Font.Gotham
-        SubLabel.TextSize = 8
-        SubLabel.TextXAlignment = Enum.TextXAlignment.Left
-        SubLabel.TextTruncate = Enum.TextTruncate.AtEnd
-        SubLabel.Parent = TextsHolder
+		local NameLabel = Instance.new("TextLabel")
+		NameLabel.Size = UDim2.new(1, 0, 0, 16)
+		NameLabel.Position = UDim2.new(0, 0, 0, 2)
+		NameLabel.BackgroundTransparency = 1
+		NameLabel.Text = data.Name or id
+		NameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+		NameLabel.Font = Enum.Font.GothamBold 
+		NameLabel.TextSize = 10
+		NameLabel.TextXAlignment = Enum.TextXAlignment.Left
+		NameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+		NameLabel.Parent = TextsHolder
 
-        local ToggleBtn = Instance.new("TextButton")
-        ToggleBtn.Size = UDim2.new(0, 50, 0, 20)
-        ToggleBtn.Position = UDim2.new(1, -56, 0.5, -10)
-        ToggleBtn.Font = Enum.Font.GothamBold
-        ToggleBtn.TextSize = 9
-        ToggleBtn.BorderSizePixel = 0
-        ToggleBtn.ClipsDescendants = true 
+		local SubLabel = Instance.new("TextLabel")
+		SubLabel.Size = UDim2.new(1, 0, 0, 12)
+		SubLabel.Position = UDim2.new(0, 0, 0, 17)
+		SubLabel.BackgroundTransparency = 1
+		SubLabel.Text = data.Category or "SPWN"
+		SubLabel.TextColor3 = Color3.fromRGB(130, 130, 140)
+		SubLabel.Font = Enum.Font.Gotham
+		SubLabel.TextSize = 8
+		SubLabel.TextXAlignment = Enum.TextXAlignment.Left
+		SubLabel.TextTruncate = Enum.TextTruncate.AtEnd
+		SubLabel.Parent = TextsHolder
 
-        local BtnCorner = Instance.new("UICorner")
-        BtnCorner.CornerRadius = UDim.new(1, 0)
-        BtnCorner.Parent = ToggleBtn
+		local ToggleBtn = Instance.new("TextButton")
+		ToggleBtn.Size = UDim2.new(0, 50, 0, 20)
+		ToggleBtn.Position = UDim2.new(1, -56, 0.5, -10)
+		ToggleBtn.Font = Enum.Font.GothamBold
+		ToggleBtn.TextSize = 9
+		ToggleBtn.BorderSizePixel = 0
+		ToggleBtn.ClipsDescendants = true 
 
-        local function updateToggleVisual()
-            if data.IsVisible then
-                ToggleBtn.Text = "Visível"
-                ToggleBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-                ToggleBtn.TextColor3 = Color3.fromRGB(10, 10, 12)
-                
-                if not (index == 1 and filterText ~= "") then
-                    UIStroke.Color = Color3.fromRGB(50, 50, 60)
-                end
-            else
-                ToggleBtn.Text = "Oculto"
-                ToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-                ToggleBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
-                
-                UIStroke.Color = Color3.fromRGB(255, 255, 255)
-                UIStroke.Thickness = 1.5
-                
-                local stroke = ToggleBtn:FindFirstChildOfClass("UIStroke")
-                if not stroke then
-                    stroke = Instance.new("UIStroke", ToggleBtn)
-                    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-                end
-                stroke.Color = Color3.fromRGB(100, 100, 110)
-                stroke.Thickness = 1
-            end
-        end
+		local BtnCorner = Instance.new("UICorner")
+		BtnCorner.CornerRadius = UDim.new(1, 0)
+		BtnCorner.Parent = ToggleBtn
 
-        updateToggleVisual()
+		local function updateToggleVisual()
+			if data.IsVisible then
+				ToggleBtn.Text = "Visível"
+				ToggleBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+				ToggleBtn.TextColor3 = Color3.fromRGB(10, 10, 12)
 
-        ToggleBtn.MouseButton1Click:Connect(function()
-            data.IsVisible = not data.IsVisible
-            WritePersistedVisibility(data.GuiObject, data.IsVisible)
-            ApplyGuiVisibility(data.GuiObject, data.IsVisible)
-            updateToggleVisual()
-        end)
-        ToggleBtn.Parent = ItemFrame
+				if not (index == 1 and filterText ~= "") then
+					UIStroke.Color = Color3.fromRGB(50, 50, 60)
+				end
+			else
+				ToggleBtn.Text = "Oculto"
+				ToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+				ToggleBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
 
-        local lastClick = 0
-        ItemFrame.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1
-                or input.UserInputType == Enum.UserInputType.Touch then
-                local now = os.clock()
-                if now - lastClick < 0.35 then
-                    local cid = id
-                    task.defer(function()
-                        local entry = RegisteredScripts[cid]
-                        if entry then
-                            if entry.OnDestroy then pcall(entry.OnDestroy) end
-                            if entry.GuiObject then entry.GuiObject:Destroy() end
-                            RegisteredScripts[cid] = nil
-                        end
-                        RefreshList()
-                    end)
-                end
-                lastClick = now
-            end
-        end)
-    end
+				UIStroke.Color = Color3.fromRGB(255, 255, 255)
+				UIStroke.Thickness = 1.5
+
+				local stroke = ToggleBtn:FindFirstChildOfClass("UIStroke")
+				if not stroke then
+					stroke = Instance.new("UIStroke", ToggleBtn)
+					stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+				end
+				stroke.Color = Color3.fromRGB(100, 100, 110)
+				stroke.Thickness = 1
+			end
+		end
+
+		updateToggleVisual()
+
+		ToggleBtn.MouseButton1Click:Connect(function()
+			data.IsVisible = not data.IsVisible
+			WritePersistedVisibility(data.GuiObject, data.IsVisible)
+			ApplyGuiVisibility(data.GuiObject, data.IsVisible)
+			updateToggleVisual()
+		end)
+		ToggleBtn.Parent = ItemFrame
+
+		local lastClick = 0
+		ItemFrame.InputBegan:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1
+				or input.UserInputType == Enum.UserInputType.Touch then
+				local now = os.clock()
+				if now - lastClick < 0.35 then
+					local cid = id
+					task.defer(function()
+						local entry = RegisteredScripts[cid]
+						if entry then
+							if entry.OnDestroy then pcall(entry.OnDestroy) end
+							if entry.GuiObject then
+								DestroyCompanionGuis(entry.GuiObject)
+								pcall(function() entry.GuiObject:Destroy() end)
+							end
+							RegisteredScripts[cid] = nil
+						end
+						RefreshList()
+					end)
+				end
+				lastClick = now
+			end
+		end)
+	end
 end
 
 local function CreateManagerUI()
-    IsDestroyed = false
+	IsDestroyed = false
 
-    local ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "ScriptManager_SPWN"
-    ScreenGui.ResetOnSpawn = false
-    ScreenGui.DisplayOrder = 999
-    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	local ScreenGui = Instance.new("ScreenGui")
+	ScreenGui.Name = "ScriptManager_SPWN"
+	ScreenGui.ResetOnSpawn = false
+	ScreenGui.DisplayOrder = 999
+	ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
-    pcall(function() ScreenGui.Parent = CoreGui end)
-    if not ScreenGui.Parent then
-        ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-    end
-    ScreenGuiRef = ScreenGui
+	pcall(function() ScreenGui.Parent = CoreGui end)
+	if not ScreenGui.Parent then
+		ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+	end
+	ScreenGuiRef = ScreenGui
 
-    -- =====================================================================
-    -- ADAPTAÇÃO AUTOMÁTICA DE ESCALA (+70% NO PC, PADRÃO NO MOBILE)
-    -- =====================================================================
-    local uiScale = Instance.new("UIScale", ScreenGui)
-    local function updateUIScale()
-        if not UserInputService.TouchEnabled then
-            uiScale.Scale = 1.7 -- Aumenta 70% no PC
-        else
-            uiScale.Scale = 1.0 -- Mantém tamanho padrão no mobile
-        end
-    end
-    updateUIScale()
+	-- =====================================================================
+	-- ADAPTAÇÃO AUTOMÁTICA DE ESCALA (+70% NO PC, PADRÃO NO MOBILE)
+	-- =====================================================================
+	local uiScale = Instance.new("UIScale", ScreenGui)
+	local function updateUIScale()
+		if not UserInputService.TouchEnabled then
+			uiScale.Scale = 1.7 -- Aumenta 70% no PC
+		else
+			uiScale.Scale = 1.0 -- Mantém tamanho padrão no mobile
+		end
+	end
+	updateUIScale()
 
-    -- Atualiza escala se o dispositivo mudar (ex: notebook híbrido)
-    UserInputService.LastInputTypeChanged:Connect(updateUIScale)
+	-- Atualiza escala se o dispositivo mudar (ex: notebook híbrido)
+	UserInputService.LastInputTypeChanged:Connect(updateUIScale)
 
-    MainFrame = Instance.new("Frame")
-    MainFrame.Name = "MainFrame"
-    MainFrame.Size = UDim2.new(0, 208, 0, 304) 
-    MainFrame.Position = UDim2.new(0.5, -104, 0.4, -152)
-    MainFrame.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
-    MainFrame.BorderSizePixel = 0
-    MainFrame.Active = true
-    MainFrame.Draggable = true 
-    MainFrame.Parent = ScreenGui
+	MainFrame = Instance.new("Frame")
+	MainFrame.Name = "MainFrame"
+	MainFrame.Size = UDim2.new(0, 208, 0, 304) 
+	MainFrame.Position = UDim2.new(0.5, -104, 0.4, -152)
+	MainFrame.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
+	MainFrame.BorderSizePixel = 0
+	MainFrame.Active = true
+	MainFrame.Draggable = true 
+	MainFrame.Parent = ScreenGui
 
-    local MainStroke = Instance.new("UIStroke")
-    MainStroke.Color = Color3.fromRGB(255, 255, 255)
-    MainStroke.Thickness = 1.5
-    MainStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    MainStroke.Parent = MainFrame
+	local MainStroke = Instance.new("UIStroke")
+	MainStroke.Color = Color3.fromRGB(255, 255, 255)
+	MainStroke.Thickness = 1.5
+	MainStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	MainStroke.Parent = MainFrame
 
-    local TopBar = Instance.new("Frame")
-    TopBar.Size = UDim2.new(1, 0, 0, 40)
-    TopBar.BackgroundTransparency = 1
-    TopBar.Parent = MainFrame
+	local TopBar = Instance.new("Frame")
+	TopBar.Size = UDim2.new(1, 0, 0, 40)
+	TopBar.BackgroundTransparency = 1
+	TopBar.Parent = MainFrame
 
-    local SunIcon = Instance.new("ImageLabel")
-    SunIcon.Size = UDim2.new(0, 20, 0, 20)
-    SunIcon.Position = UDim2.new(0, 10, 0.5, -10)
-    SunIcon.BackgroundTransparency = 1
-    SunIcon.Image = "rbxassetid://77667780640343"
-    SunIcon.Parent = TopBar
+	local SunIcon = Instance.new("ImageLabel")
+	SunIcon.Size = UDim2.new(0, 20, 0, 20)
+	SunIcon.Position = UDim2.new(0, 10, 0.5, -10)
+	SunIcon.BackgroundTransparency = 1
+	SunIcon.Image = "rbxassetid://77667780640343"
+	SunIcon.Parent = TopBar
 
-    local TitleLabel = Instance.new("TextLabel")
-    TitleLabel.Size = UDim2.new(1, -70, 1, 0)
-    TitleLabel.Position = UDim2.new(0, 34, 0, 0)
-    TitleLabel.BackgroundTransparency = 1
-    TitleLabel.Text = "CLOSE AND OPEN"
-    TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    TitleLabel.Font = Enum.Font.Arcade
-    TitleLabel.TextSize = 11
-    TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
-    TitleLabel.Parent = TopBar
+	local TitleLabel = Instance.new("TextLabel")
+	TitleLabel.Size = UDim2.new(1, -70, 1, 0)
+	TitleLabel.Position = UDim2.new(0, 34, 0, 0)
+	TitleLabel.BackgroundTransparency = 1
+	TitleLabel.Text = "CLOSE AND OPEN"
+	TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	TitleLabel.Font = Enum.Font.Arcade
+	TitleLabel.TextSize = 11
+	TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+	TitleLabel.Parent = TopBar
 
-    local CloseButtonFrame = Instance.new("Frame")
-    CloseButtonFrame.Size = UDim2.new(0, 24, 0, 24)
-    CloseButtonFrame.Position = UDim2.new(1, -32, 0.5, -12)
-    CloseButtonFrame.BackgroundTransparency = 1
-    CloseButtonFrame.Parent = TopBar
-    
-    local CloseStroke = Instance.new("UIStroke")
-    CloseStroke.Color = Color3.fromRGB(255, 255, 255)
-    CloseStroke.Thickness = 1.5
-    CloseStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    CloseStroke.Parent = CloseButtonFrame
+	local CloseButtonFrame = Instance.new("Frame")
+	CloseButtonFrame.Size = UDim2.new(0, 24, 0, 24)
+	CloseButtonFrame.Position = UDim2.new(1, -32, 0.5, -12)
+	CloseButtonFrame.BackgroundTransparency = 1
+	CloseButtonFrame.Parent = TopBar
 
-    local CloseButton = Instance.new("TextButton")
-    CloseButton.Size = UDim2.new(1, 0, 1, 0)
-    CloseButton.BackgroundTransparency = 1
-    CloseButton.Text = "X"
-    CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    CloseButton.Font = Enum.Font.Arcade
-    CloseButton.TextSize = 14
-    CloseButton.Parent = CloseButtonFrame
+	local CloseStroke = Instance.new("UIStroke")
+	CloseStroke.Color = Color3.fromRGB(255, 255, 255)
+	CloseStroke.Thickness = 1.5
+	CloseStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	CloseStroke.Parent = CloseButtonFrame
 
-    CloseButton.MouseButton1Click:Connect(function()
-        if ScreenGuiRef then ScreenGuiRef:Destroy() end
-        ResetState()
-    end)
+	local CloseButton = Instance.new("TextButton")
+	CloseButton.Size = UDim2.new(1, 0, 1, 0)
+	CloseButton.BackgroundTransparency = 1
+	CloseButton.Text = "X"
+	CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+	CloseButton.Font = Enum.Font.Arcade
+	CloseButton.TextSize = 14
+	CloseButton.Parent = CloseButtonFrame
 
-    local TopDivider = Instance.new("Frame")
-    TopDivider.Size = UDim2.new(1, 0, 0, 1)
-    TopDivider.Position = UDim2.new(0, 0, 0, 40)
-    TopDivider.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    TopDivider.BorderSizePixel = 0
-    TopDivider.Parent = MainFrame
+	CloseButton.MouseButton1Click:Connect(function()
+		if ScreenGuiRef then ScreenGuiRef:Destroy() end
+		ResetState()
+	end)
 
-    local SearchContainer = Instance.new("Frame")
-    SearchContainer.Size = UDim2.new(1, -12, 0, 26)
-    SearchContainer.Position = UDim2.new(0, 6, 0, 48)
-    SearchContainer.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-    SearchContainer.BorderSizePixel = 0
-    SearchContainer.Parent = MainFrame
+	local TopDivider = Instance.new("Frame")
+	TopDivider.Size = UDim2.new(1, 0, 0, 1)
+	TopDivider.Position = UDim2.new(0, 0, 0, 40)
+	TopDivider.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	TopDivider.BorderSizePixel = 0
+	TopDivider.Parent = MainFrame
 
-    local SearchStroke = Instance.new("UIStroke")
-    SearchStroke.Color = Color3.fromRGB(80, 80, 90)
-    SearchStroke.Thickness = 1
-    SearchStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    SearchStroke.Parent = SearchContainer
+	local SearchContainer = Instance.new("Frame")
+	SearchContainer.Size = UDim2.new(1, -12, 0, 26)
+	SearchContainer.Position = UDim2.new(0, 6, 0, 48)
+	SearchContainer.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+	SearchContainer.BorderSizePixel = 0
+	SearchContainer.Parent = MainFrame
 
-    local SearchIcon = Instance.new("ImageLabel")
-    SearchIcon.Size = UDim2.new(0, 12, 0, 12)
-    SearchIcon.Position = UDim2.new(0, 6, 0.5, -6)
-    SearchIcon.BackgroundTransparency = 1
-    SearchIcon.Image = "rbxassetid://84375270553103"
-    SearchIcon.Parent = SearchContainer
+	local SearchStroke = Instance.new("UIStroke")
+	SearchStroke.Color = Color3.fromRGB(80, 80, 90)
+	SearchStroke.Thickness = 1
+	SearchStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	SearchStroke.Parent = SearchContainer
 
-    SearchBox = Instance.new("TextBox")
-    SearchBox.Size = UDim2.new(1, -24, 1, 0)
-    SearchBox.Position = UDim2.new(0, 22, 0, 0)
-    SearchBox.BackgroundTransparency = 1
-    SearchBox.Text = ""
-    SearchBox.PlaceholderText = "Buscar scripts..."
-    SearchBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 130)
-    SearchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-    SearchBox.Font = Enum.Font.Gotham
-    SearchBox.TextSize = 9
-    SearchBox.TextXAlignment = Enum.TextXAlignment.Left
-    SearchBox.Parent = SearchContainer
+	local SearchIcon = Instance.new("ImageLabel")
+	SearchIcon.Size = UDim2.new(0, 12, 0, 12)
+	SearchIcon.Position = UDim2.new(0, 6, 0.5, -6)
+	SearchIcon.BackgroundTransparency = 1
+	SearchIcon.Image = "rbxassetid://84375270553103"
+	SearchIcon.Parent = SearchContainer
 
-    SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
-        RefreshList()
-    end)
+	SearchBox = Instance.new("TextBox")
+	SearchBox.Size = UDim2.new(1, -24, 1, 0)
+	SearchBox.Position = UDim2.new(0, 22, 0, 0)
+	SearchBox.BackgroundTransparency = 1
+	SearchBox.Text = ""
+	SearchBox.PlaceholderText = "Buscar scripts..."
+	SearchBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 130)
+	SearchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+	SearchBox.Font = Enum.Font.Gotham
+	SearchBox.TextSize = 9
+	SearchBox.TextXAlignment = Enum.TextXAlignment.Left
+	SearchBox.Parent = SearchContainer
 
-    local Scroll = Instance.new("ScrollingFrame")
-    Scroll.Size = UDim2.new(1, -6, 1, -82)
-    Scroll.Position = UDim2.new(0, 3, 0, 78)
-    Scroll.BackgroundTransparency = 1
-    Scroll.BorderSizePixel = 0
-    Scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    Scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-    Scroll.ScrollBarThickness = 2
-    Scroll.ScrollBarImageColor3 = Color3.fromRGB(255, 255, 255)
-    Scroll.Parent = MainFrame
+	SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+		RefreshList()
+	end)
 
-    local UIList = Instance.new("UIListLayout")
-    UIList.Padding = UDim.new(0, 4)
-    UIList.SortOrder = Enum.SortOrder.LayoutOrder
-    UIList.Parent = Scroll
+	local Scroll = Instance.new("ScrollingFrame")
+	Scroll.Size = UDim2.new(1, -6, 1, -82)
+	Scroll.Position = UDim2.new(0, 3, 0, 78)
+	Scroll.BackgroundTransparency = 1
+	Scroll.BorderSizePixel = 0
+	Scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	Scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+	Scroll.ScrollBarThickness = 2
+	Scroll.ScrollBarImageColor3 = Color3.fromRGB(255, 255, 255)
+	Scroll.Parent = MainFrame
 
-    UIListFrame = Scroll
+	local UIList = Instance.new("UIListLayout")
+	UIList.Padding = UDim.new(0, 4)
+	UIList.SortOrder = Enum.SortOrder.LayoutOrder
+	UIList.Parent = Scroll
+
+	UIListFrame = Scroll
 end
 
 function ScriptManager.RegisterScript(id, config)
-    if IsDestroyed then
-        _G.ScriptManagerQueue = _G.ScriptManagerQueue or {}
-        table.insert(_G.ScriptManagerQueue, { id = id, config = config })
-        return
-    end
+	if IsDestroyed then
+		_G.ScriptManagerQueue = _G.ScriptManagerQueue or {}
+		table.insert(_G.ScriptManagerQueue, { id = id, config = config })
+		return
+	end
 
-    local gui = config.GuiObject
-    local isVisible = ReadPersistedVisibility(gui, true)
+	local gui = config.GuiObject
+	local isVisible = ReadPersistedVisibility(gui, true)
 
-    RegisteredScripts[id] = {
-        Name = config.Name or id,
-        Category = config.Category or "SPWN",
-        GuiObject = gui,
-        IsVisible = isVisible,
-        OnDestroy = config.OnDestroy,
-    }
+	RegisteredScripts[id] = {
+		Name = config.Name or id,
+		Category = config.Category or "SPWN",
+		GuiObject = gui,
+		IsVisible = isVisible,
+		OnDestroy = config.OnDestroy,
+	}
 
-    ApplyGuiVisibility(gui, isVisible)
-    RefreshList()
+	ApplyGuiVisibility(gui, isVisible)
+	RefreshList()
 end
 
 local function CleanupPreviousInstances()
-    pcall(function()
-        local g = CoreGui:FindFirstChild("ScriptManager_SPWN")
-        if g then g:Destroy() end
-    end)
-    pcall(function()
-        local pg = LocalPlayer:FindFirstChild("PlayerGui")
-        if pg then
-            local g = pg:FindFirstChild("ScriptManager_SPWN")
-            if g then g:Destroy() end
-        end
-    end)
+	pcall(function()
+		local g = CoreGui:FindFirstChild("ScriptManager_SPWN")
+		if g then g:Destroy() end
+	end)
+	pcall(function()
+		local pg = LocalPlayer:FindFirstChild("PlayerGui")
+		if pg then
+			local g = pg:FindFirstChild("ScriptManager_SPWN")
+			if g then g:Destroy() end
+		end
+	end)
 end
 
 CleanupPreviousInstances()
@@ -436,83 +503,83 @@ CreateManagerUI()
 _G.ScriptManager = ScriptManager
 
 task.spawn(function()
-    while not IsDestroyed do
-        local needsRefresh = false
+	while not IsDestroyed do
+		local needsRefresh = false
 
-        local queue = _G.ScriptManagerQueue
-        if queue and type(queue) == "table" then
-            for i = #queue, 1, -1 do
-                local reg = queue[i]
-                if reg and reg.config and reg.config.GuiObject and reg.config.GuiObject.Parent then
-                    local gui = reg.config.GuiObject
-                    local isVisible = ReadPersistedVisibility(gui, true)
+		local queue = _G.ScriptManagerQueue
+		if queue and type(queue) == "table" then
+			for i = #queue, 1, -1 do
+				local reg = queue[i]
+				if reg and reg.config and reg.config.GuiObject and reg.config.GuiObject.Parent then
+					local gui = reg.config.GuiObject
+					local isVisible = ReadPersistedVisibility(gui, true)
 
-                    RegisteredScripts[reg.id] = {
-                        Name = reg.config.Name or reg.id,
-                        Category = reg.config.Category or "SPWN",
-                        GuiObject = gui,
-                        IsVisible = isVisible,
-                        OnDestroy = reg.config.OnDestroy,
-                    }
-                    ApplyGuiVisibility(gui, isVisible)
+					RegisteredScripts[reg.id] = {
+						Name = reg.config.Name or reg.id,
+						Category = reg.config.Category or "SPWN",
+						GuiObject = gui,
+						IsVisible = isVisible,
+						OnDestroy = reg.config.OnDestroy,
+					}
+					ApplyGuiVisibility(gui, isVisible)
 
-                    table.remove(queue, i)
-                    needsRefresh = true
-                end
-            end
-        end
+					table.remove(queue, i)
+					needsRefresh = true
+				end
+			end
+		end
 
-        pcall(function()
-            local containers = { CoreGui, LocalPlayer:FindFirstChild("PlayerGui") }
-            for _, container in ipairs(containers) do
-                if container then
-                    for _, gui in ipairs(container:GetDescendants()) do
-                        local sId = gui:GetAttribute("SPWN_ManagedScriptID")
-                        if sId and (gui:IsA("ScreenGui") or gui:IsA("Folder")) then
-                            local sName = gui:GetAttribute("SPWN_ManagedScriptName") or sId
-                            local sCat  = gui:GetAttribute("SPWN_ManagedScriptCategory") or "SPWN"
+		pcall(function()
+			local containers = { CoreGui, LocalPlayer:FindFirstChild("PlayerGui") }
+			for _, container in ipairs(containers) do
+				if container then
+					for _, gui in ipairs(container:GetDescendants()) do
+						local sId = gui:GetAttribute("SPWN_ManagedScriptID")
+						if sId and (gui:IsA("ScreenGui") or gui:IsA("Folder")) then
+							local sName = gui:GetAttribute("SPWN_ManagedScriptName") or sId
+							local sCat  = gui:GetAttribute("SPWN_ManagedScriptCategory") or "SPWN"
 
-                            local existing = RegisteredScripts[sId]
-                            if not existing
-                                or existing.GuiObject ~= gui
-                                or not existing.GuiObject
-                                or not existing.GuiObject.Parent then
+							local existing = RegisteredScripts[sId]
+							if not existing
+								or existing.GuiObject ~= gui
+								or not existing.GuiObject
+								or not existing.GuiObject.Parent then
 
-                                local isVisible = ReadPersistedVisibility(
-                                    gui,
-                                    existing and existing.IsVisible or nil
-                                )
+								local isVisible = ReadPersistedVisibility(
+									gui,
+									existing and existing.IsVisible or nil
+								)
 
-                                RegisteredScripts[sId] = {
-                                    Name = sName,
-                                    Category = sCat,
-                                    GuiObject = gui,
-                                    IsVisible = isVisible,
-                                    OnDestroy = existing and existing.OnDestroy or nil,
-                                }
-                                ApplyGuiVisibility(gui, isVisible)
+								RegisteredScripts[sId] = {
+									Name = sName,
+									Category = sCat,
+									GuiObject = gui,
+									IsVisible = isVisible,
+									OnDestroy = existing and existing.OnDestroy or nil,
+								}
+								ApplyGuiVisibility(gui, isVisible)
 
-                                needsRefresh = true
-                            end
-                        end
-                    end
-                end
-            end
-        end)
+								needsRefresh = true
+							end
+						end
+					end
+				end
+			end
+		end)
 
-        for id, data in pairs(RegisteredScripts) do
-            if not data.GuiObject or not data.GuiObject.Parent then
-                needsRefresh = true
-                break
-            end
-        end
+		for id, data in pairs(RegisteredScripts) do
+			if not data.GuiObject or not data.GuiObject.Parent then
+				needsRefresh = true
+				break
+			end
+		end
 
-        if needsRefresh then
-            RefreshList()
-        end
+		if needsRefresh then
+			RefreshList()
+		end
 
-        task.wait(0.4)
-    end
+		task.wait(0.4)
+	end
 end)
 
 return ScriptManager
